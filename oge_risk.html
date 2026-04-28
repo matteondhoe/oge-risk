@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>OG&amp;E Identity Risk Analysis</title>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+/* ── Design tokens (DESIGN-claude.md) ─────────────────────────────────── */
+:root{
+  --primary:#cc785c;--primary-active:#a9583e;--primary-disabled:#e6dfd8;
+  --ink:#141413;--body:#3d3d3a;--body-strong:#252523;--muted:#6c6a64;--muted-soft:#8e8b82;
+  --hairline:#e6dfd8;--hairline-soft:#ebe6df;
+  --canvas:#faf9f5;--surface-soft:#f5f0e8;--surface-card:#efe9de;
+  --surface-cream-strong:#e8e0d2;
+  --surface-dark:#181715;--surface-dark-elevated:#252320;--surface-dark-soft:#1f1e1b;
+  --on-primary:#fff;--on-dark:#faf9f5;--on-dark-soft:#a09d96;
+  --accent-teal:#5db8a6;--accent-amber:#e8a55a;
+  --success:#5db872;--warning:#d4a017;--error:#c64545;
+  --serif:'EB Garamond',serif;
+  --sans:'Inter',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+  --r-sm:6px;--r-md:8px;--r-lg:12px;--r-xl:16px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--canvas);color:var(--body);font-family:var(--sans);font-size:14px;line-height:1.55;}
+
+/* ── NAV ─────────────────────────────────────────────────────────────── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  height:64px;background:var(--canvas);border-bottom:1px solid var(--hairline);
+  display:flex;align-items:center;justify-content:space-between;padding:0 2rem;
+}
+.nav-brand{
+  font-family:var(--serif);font-size:1.2rem;font-weight:400;
+  letter-spacing:-0.3px;color:var(--ink);
+}
+.nav-brand span{color:var(--primary)}
+.nav-tabs{display:flex;gap:0}
+.nav-tab{
+  height:64px;display:flex;align-items:center;padding:0 1.2rem;
+  font-size:0.8rem;font-weight:500;letter-spacing:0;
+  color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;
+  transition:color 0.15s;user-select:none;font-family:var(--sans);
+}
+.nav-tab:hover{color:var(--ink)}
+.nav-tab.active{color:var(--ink);border-bottom-color:var(--primary)}
+.nav-right{font-size:0.75rem;color:var(--muted-soft);letter-spacing:0.5px}
+
+main{padding-top:64px}
+.page{display:none;animation:fadeIn 0.25s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ── BANDS / LAYOUT ──────────────────────────────────────────────────── */
+.band{padding:64px 2rem;max-width:1200px;margin:0 auto}
+.band-dark{background:var(--surface-dark);color:var(--on-dark)}
+.band-dark .muted{color:var(--on-dark-soft)}
+.band-card{background:var(--surface-card)}
+.band-full{max-width:none;padding-left:0;padding-right:0}
+.band-full-inner{max-width:1200px;margin:0 auto;padding:0 2rem}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:2rem}
+.three-col{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem}
+@media(max-width:900px){.two-col,.three-col{grid-template-columns:1fr}}
+
+/* ── TYPOGRAPHY ──────────────────────────────────────────────────────── */
+.display-xl{font-family:var(--serif);font-size:clamp(2.5rem,5vw,4rem);font-weight:400;line-height:1.05;letter-spacing:-1.5px;color:var(--ink)}
+.display-lg{font-family:var(--serif);font-size:clamp(2rem,4vw,3rem);font-weight:400;line-height:1.1;letter-spacing:-1px;color:var(--ink)}
+.display-md{font-family:var(--serif);font-size:clamp(1.5rem,3vw,2.25rem);font-weight:400;line-height:1.15;letter-spacing:-0.5px;color:var(--ink)}
+.display-sm{font-family:var(--serif);font-size:1.75rem;font-weight:400;line-height:1.2;letter-spacing:-0.3px}
+.on-dark .display-xl,.on-dark .display-lg,.on-dark .display-md,.band-dark .display-xl,.band-dark .display-lg,.band-dark .display-md{color:var(--on-dark)}
+.caption-upper{font-size:0.72rem;font-weight:500;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.band-dark .caption-upper{color:var(--on-dark-soft)}
+em.coral{color:var(--primary);font-style:normal}
+
+/* ── STAT GRID ──────────────────────────────────────────────────────── */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--hairline);border:1px solid var(--hairline);border-radius:var(--r-lg);overflow:hidden;margin:2rem 0}
+.stat-cell{background:var(--canvas);padding:1.5rem;}
+.band-dark .stat-cell{background:var(--surface-dark-elevated)}
+.stat-label{font-size:0.7rem;font-weight:500;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:0.4rem}
+.band-dark .stat-label{color:var(--on-dark-soft)}
+.stat-value{font-family:var(--serif);font-size:2.2rem;font-weight:400;line-height:1;letter-spacing:-0.5px;color:var(--primary)}
+.stat-value.teal{color:var(--accent-teal)}
+.stat-value.amber{color:var(--accent-amber)}
+.stat-value.ink{color:var(--ink)}
+.band-dark .stat-value.ink{color:var(--on-dark)}
+.stat-sub{font-size:0.72rem;color:var(--muted-soft);margin-top:0.25rem}
+
+/* ── FEATURE CARDS ──────────────────────────────────────────────────── */
+.feature-card{background:var(--surface-card);border-radius:var(--r-lg);padding:2rem;}
+.feature-card h3{font-family:var(--serif);font-size:1.25rem;font-weight:400;color:var(--ink);margin-bottom:0.5rem}
+.feature-card p{font-size:0.85rem;color:var(--muted);line-height:1.6}
+
+/* ── DARK CARD (product mockup style) ──────────────────────────────── */
+.dark-card{background:var(--surface-dark);border-radius:var(--r-lg);padding:2rem;color:var(--on-dark)}
+.dark-card h3{font-family:var(--serif);font-size:1.2rem;font-weight:400;color:var(--on-dark);margin-bottom:0.75rem}
+.dark-card p{font-size:0.85rem;color:var(--on-dark-soft);line-height:1.6}
+
+/* ── CALLOUT CORAL ──────────────────────────────────────────────────── */
+.callout-coral{background:var(--primary);border-radius:var(--r-lg);padding:2rem;color:var(--on-primary);margin:2rem 0}
+.callout-coral .caption-upper{color:rgba(255,255,255,0.7)}
+.callout-coral p{font-size:0.9rem;line-height:1.6;margin-top:0.5rem}
+.callout-coral strong{color:#fff}
+
+/* ── BUTTONS ─────────────────────────────────────────────────────────── */
+.btn-primary{display:inline-flex;align-items:center;gap:0.5rem;background:var(--primary);color:var(--on-primary);font-family:var(--sans);font-size:0.85rem;font-weight:500;padding:10px 20px;height:40px;border-radius:var(--r-md);border:none;cursor:pointer;transition:background 0.15s}
+.btn-primary:hover{background:var(--primary-active)}
+.btn-secondary{display:inline-flex;align-items:center;gap:0.5rem;background:var(--canvas);color:var(--ink);font-family:var(--sans);font-size:0.85rem;font-weight:500;padding:10px 20px;height:40px;border-radius:var(--r-md);border:1px solid var(--hairline);cursor:pointer;transition:border-color 0.15s}
+.btn-secondary:hover{border-color:var(--primary)}
+
+/* ── INPUTS ──────────────────────────────────────────────────────────── */
+.text-input{background:var(--canvas);color:var(--ink);font-family:var(--sans);font-size:0.9rem;padding:10px 14px;height:40px;border-radius:var(--r-md);border:1px solid var(--hairline);outline:none;transition:border-color 0.15s;width:100%}
+.text-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(204,120,92,0.15)}
+.text-input.dark{background:var(--surface-dark-elevated);border-color:rgba(255,255,255,0.1);color:var(--on-dark)}
+.text-input.dark:focus{border-color:var(--primary)}
+
+/* ── TIER BADGES ─────────────────────────────────────────────────────── */
+.tier-badge{display:inline-block;padding:3px 10px;font-size:0.65rem;font-weight:500;letter-spacing:1px;text-transform:uppercase;border-radius:9999px}
+.tier-Critical{background:rgba(198,69,69,0.12);color:var(--error);border:1px solid rgba(198,69,69,0.25)}
+.tier-High{background:rgba(204,120,92,0.12);color:var(--primary);border:1px solid rgba(204,120,92,0.25)}
+.tier-Medium{background:rgba(232,165,90,0.12);color:var(--accent-amber);border:1px solid rgba(232,165,90,0.25)}
+.tier-Low{background:var(--surface-card);color:var(--muted);border:1px solid var(--hairline)}
+.inactive-badge{display:inline-block;padding:3px 10px;font-size:0.65rem;font-weight:500;letter-spacing:1px;text-transform:uppercase;border-radius:9999px;background:rgba(212,160,23,0.12);color:var(--warning);border:1px solid rgba(212,160,23,0.25)}
+
+/* ── TABLE ──────────────────────────────────────────────────────────── */
+.table-wrap{overflow-y:auto;max-height:60vh;border:1px solid var(--hairline);border-radius:var(--r-lg);}
+.risk-table{width:100%;border-collapse:collapse;font-size:0.8rem}
+.risk-table thead{position:sticky;top:0;z-index:5}
+.risk-table th{padding:0.65rem 0.9rem;font-size:0.68rem;font-weight:500;letter-spacing:0.8px;text-transform:uppercase;color:var(--muted);text-align:left;border-bottom:1px solid var(--hairline);background:var(--surface-soft);white-space:nowrap;cursor:pointer;user-select:none}
+.risk-table th:hover{color:var(--ink)}
+.risk-table td{padding:0.65rem 0.9rem;border-bottom:1px solid var(--hairline-soft);color:var(--body);white-space:nowrap;vertical-align:middle;background:var(--surface-card)}
+.risk-table tr:last-child td{border-bottom:none}
+.risk-table tr:hover td{background:var(--surface-cream-strong)}
+
+/* ── SCORE BAR ───────────────────────────────────────────────────────── */
+.score-wrap{display:flex;align-items:center;gap:0.6rem;min-width:120px}
+.score-num{width:2.5rem;text-align:right;font-weight:600;font-size:0.85rem}
+.score-track{flex:1;height:3px;background:var(--hairline);border-radius:2px}
+.score-fill{height:3px;border-radius:2px;transition:width 0.4s ease}
+
+/* ── CONTROLS ────────────────────────────────────────────────────────── */
+.controls{display:flex;gap:0.5rem;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap}
+.filter-btn{padding:6px 14px;font-family:var(--sans);font-size:0.75rem;font-weight:500;border:1px solid var(--hairline);background:var(--canvas);color:var(--muted);cursor:pointer;border-radius:var(--r-md);transition:all 0.15s}
+.filter-btn:hover{border-color:var(--primary);color:var(--ink)}
+.filter-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
+
+/* ── LOOKUP CARD (dark surface / product mockup style) ───────────────── */
+#lookup-result{display:none;background:var(--surface-dark);border-radius:var(--r-xl);padding:2rem;margin-top:1.5rem;color:var(--on-dark)}
+#lookup-result.visible{display:block}
+.lookup-header{display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.08)}
+.lookup-user-name{font-family:var(--serif);font-size:1.6rem;font-weight:400;color:var(--on-dark)}
+.signal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin:1.5rem 0}
+.signal-cell{background:var(--surface-dark-elevated);border-radius:var(--r-md);padding:1rem}
+.signal-label{font-size:0.68rem;font-weight:500;letter-spacing:0.8px;text-transform:uppercase;color:var(--on-dark-soft);margin-bottom:0.3rem}
+.signal-val{font-family:var(--mono);font-size:1.1rem;font-weight:500;color:var(--on-dark)}
+.signal-val.coral{color:var(--primary)}
+.signal-val.amber{color:var(--accent-amber)}
+.signal-val.teal{color:var(--accent-teal)}
+.briefing-text{font-size:0.9rem;line-height:1.7;color:var(--on-dark-soft);background:var(--surface-dark-soft);border-radius:var(--r-md);padding:1rem 1.25rem;margin-top:1rem;border-left:3px solid var(--primary)}
+.briefing-text strong{color:var(--on-dark)}
+
+/* ── WHAT-IF SIMULATOR ───────────────────────────────────────────────── */
+.simulator-band{background:var(--surface-dark)}
+.slider-row{display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem}
+.slider-label{width:160px;font-size:0.8rem;color:var(--on-dark-soft)}
+input[type=range]{flex:1;accent-color:var(--primary);height:3px}
+.slider-pct{width:40px;text-align:right;font-family:var(--mono);font-size:0.8rem;color:var(--primary);font-weight:500}
+
+/* ── MINI BAR CHART ──────────────────────────────────────────────────── */
+.mini-bar-row{display:flex;align-items:center;gap:0.75rem;margin-bottom:0.9rem}
+.mini-bar-label{width:80px;font-size:0.72rem;color:var(--muted)}
+.mini-bar-track{flex:1;height:6px;background:var(--hairline);border-radius:3px}
+.mini-bar-fill{height:6px;border-radius:3px}
+.mini-bar-val{width:60px;font-family:var(--serif);font-size:1rem;font-weight:400;text-align:right}
+
+/* ── RADAR ───────────────────────────────────────────────────────────── */
+canvas#radar{display:block;max-width:360px;margin:0 auto}
+
+/* ── EXECUTIVE BRIEFING ──────────────────────────────────────────────── */
+.briefing-box{background:var(--surface-dark-elevated);border-radius:var(--r-lg);padding:1.5rem 2rem;border-left:4px solid var(--primary);font-size:0.9rem;line-height:1.8;color:var(--on-dark-soft)}
+.briefing-box strong{color:var(--primary-active)}
+
+/* ── SECTION DIVIDER ─────────────────────────────────────────────────── */
+.divider{height:1px;background:var(--hairline);margin:3rem 0}
+.divider-dark{height:1px;background:rgba(255,255,255,0.08);margin:2rem 0}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--canvas)}
+::-webkit-scrollbar-thumb{background:var(--hairline);border-radius:2px}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">OG<span>&amp;</span>E &nbsp;<span style="color:var(--hairline)">/</span>&nbsp; <span style="font-size:1rem;color:var(--muted);font-family:var(--sans);font-weight:500;letter-spacing:0">Identity Risk</span></div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showPage('overview',this)">Overview</div>
+    <div class="nav-tab" onclick="showPage('physical',this)">Physical</div>
+    <div class="nav-tab" onclick="showPage('digital',this)">Digital</div>
+    <div class="nav-tab" onclick="showPage('lookup',this)">User Lookup</div>
+    <div class="nav-tab" onclick="showPage('simulator',this)">Simulator</div>
+    <div class="nav-tab" onclick="showPage('overlap',this)">Overlap</div>
+  </div>
+  <div class="nav-right">Group 3 &middot; MIS 3213</div>
+</nav>
+
+<main>
+
+<!-- ════════════════════════════════════════════ OVERVIEW -->
+<div id="page-overview" class="page active">
+
+  <!-- Hero band: cream -->
+  <div class="band" style="padding-bottom:48px">
+    <div class="caption-upper" style="margin-bottom:1rem">Identity &amp; Access Risk Analysis &middot; Milestone 3</div>
+    <h1 class="display-xl" style="max-width:700px;margin-bottom:1rem">
+      Two Systems.<br><em class="coral">One Blind Spot.</em>
+    </h1>
+    <p style="max-width:520px;color:var(--muted);line-height:1.7;font-size:0.9rem">
+      OG&amp;E runs physical badge access (OnGuard) and digital identity management (SailPoint) in complete isolation.
+      This tool surfaces risk from both and identifies users flagged independently by each system.
+    </p>
+  </div>
+
+  <!-- Stats band: dark surface (cream-to-dark rhythm) -->
+  <div style="background:var(--surface-dark);padding:48px 0">
+    <div style="max-width:1200px;margin:0 auto;padding:0 2rem">
+      <div class="caption-upper" style="color:var(--on-dark-soft);margin-bottom:1.5rem">At a Glance</div>
+      <div class="stat-grid band-dark">
+        <div class="stat-cell"><div class="stat-label">Badge Events</div><div class="stat-value ink">962,022</div><div class="stat-sub">Aug&ndash;Dec 2025</div></div>
+        <div class="stat-cell"><div class="stat-label">After-Hours</div><div class="stat-value">266,117</div><div class="stat-sub">28.1% of all access</div></div>
+        <div class="stat-cell"><div class="stat-label">Rapid Succession</div><div class="stat-value amber">718</div><div class="stat-sub">5+ swipes in 5 min</div></div>
+        <div class="stat-cell"><div class="stat-label">Physical Critical</div><div class="stat-value">1</div><div class="stat-sub">users flagged</div></div>
+        <div class="stat-cell"><div class="stat-label">Inactive w/ Access</div><div class="stat-value amber">4330</div><div class="stat-sub">should be zero</div></div>
+        <div class="stat-cell"><div class="stat-label">Digital Critical</div><div class="stat-value">279</div><div class="stat-sub">users flagged</div></div>
+        <div class="stat-cell"><div class="stat-label">Rare Entitlements</div><div class="stat-value teal">28,409</div><div class="stat-sub">held by &lt;0.5% of users</div></div>
+        <div class="stat-cell"><div class="stat-label">Identities</div><div class="stat-value ink">9,940</div><div class="stat-sub">in SailPoint</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Executive briefing: cream -->
+  <div class="band" style="padding-top:48px;padding-bottom:48px">
+    <div class="caption-upper" style="margin-bottom:1rem">CISO Briefing</div>
+    <h2 class="display-md" style="margin-bottom:1.5rem">Executive Summary</h2>
+    <div class="briefing-box" style="background:var(--surface-card);border-left-color:var(--primary);color:var(--body)">
+      <p id="exec-briefing" style="font-size:0.9rem;line-height:1.8;color:var(--body)"></p>
+    </div>
+  </div>
+
+  <!-- Distribution charts: surface-card band -->
+  <div style="background:var(--surface-soft);padding:48px 0">
+    <div style="max-width:1200px;margin:0 auto;padding:0 2rem">
+      <div class="two-col">
+        <div>
+          <div class="caption-upper" style="margin-bottom:1rem">Physical Risk Distribution</div>
+          <div id="overview-phys-chart"></div>
+        </div>
+        <div>
+          <div class="caption-upper" style="margin-bottom:1rem">Digital Risk Distribution</div>
+          <div id="overview-dig-chart"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature cards: cream (alternate back) -->
+  <div class="band">
+    <div class="caption-upper" style="margin-bottom:2rem">How It Works</div>
+    <div class="three-col">
+      <div class="feature-card">
+        <div style="font-size:1.5rem;margin-bottom:0.75rem">&#x2713;</div>
+        <h3>6 Physical Signals</h3>
+        <p>After-hours rate, reader z-score, physical footprint, rapid succession bursts, weekend-only pattern, and average dwell time are combined into a single physical risk score per badge holder.</p>
+      </div>
+      <div class="feature-card">
+        <div style="font-size:1.5rem;margin-bottom:0.75rem">&#x2713;</div>
+        <h3>4 Digital Signals</h3>
+        <p>Entitlement z-score vs job family peers, privileged access count, unassociated entitlements, and inactive identity status are weighted into a digital risk score per identity.</p>
+      </div>
+      <div class="feature-card">
+        <div style="font-size:1.5rem;margin-bottom:0.75rem">&#x2713;</div>
+        <h3>Cross-System Overlap</h3>
+        <p>Users who appear at the top of both independent lists simultaneously represent the highest-priority review targets. Neither system could identify these users alone.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════ PHYSICAL -->
+<div id="page-physical" class="page">
+  <div class="band" style="padding-bottom:32px">
+    <div class="caption-upper" style="margin-bottom:0.75rem">Physical Access &middot; OnGuard / PACS</div>
+    <h1 class="display-lg" style="margin-bottom:0.5rem">Physical Risk Scores</h1>
+    <p style="color:var(--muted);font-size:0.85rem">After-hours rate (40%) &middot; Reader z-score (25%) &middot; Footprint (15%) &middot; Rapid succession (10%) &middot; Weekend-only (5%) &middot; Dwell time (5%)</p>
+  </div>
+  <div class="band" style="padding-top:0">
+    <div class="controls">
+      <button class="filter-btn active" onclick="filterTable('phys','All',this)">All</button>
+      <button class="filter-btn" onclick="filterTable('phys','Critical',this)">Critical</button>
+      <button class="filter-btn" onclick="filterTable('phys','High',this)">High</button>
+      <button class="filter-btn" onclick="filterTable('phys','Medium',this)">Medium</button>
+      <button class="filter-btn" onclick="filterTable('phys','Low',this)">Low</button>
+      <input class="text-input" style="max-width:200px;margin-left:auto" placeholder="Search user..." oninput="searchTable('phys',this.value)"/>
+    </div>
+    <div class="table-wrap">
+      <table class="risk-table">
+        <thead><tr>
+          <th onclick="sortTable('phys','label')">User</th>
+          <th onclick="sortTable('phys','score')">Score</th>
+          <th>Tier</th>
+          <th onclick="sortTable('phys','afterhrs')">After-Hrs</th>
+          <th>After-Hrs %</th>
+          <th onclick="sortTable('phys','zscore')">Reader Z</th>
+          <th onclick="sortTable('phys','footprint')">Footprint</th>
+          <th onclick="sortTable('phys','rapid')">Rapid</th>
+          <th onclick="sortTable('phys','dwell')">Dwell (h)</th>
+          <th>Wkend %</th>
+        </tr></thead>
+        <tbody id="phys-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ DIGITAL -->
+<div id="page-digital" class="page">
+  <div class="band" style="padding-bottom:32px">
+    <div class="caption-upper" style="margin-bottom:0.75rem">Digital Identity &middot; SailPoint / IdentityNow</div>
+    <h1 class="display-lg" style="margin-bottom:0.5rem">Digital Risk Scores</h1>
+    <p style="color:var(--muted);font-size:0.85rem">Entitlement z-score vs peers (35%) &middot; Privileged count (30%) &middot; Unassociated entitlements (20%) &middot; Inactive identity (15%)</p>
+  </div>
+  <div class="band" style="padding-top:0">
+    <div class="controls">
+      <button class="filter-btn active" onclick="filterTable('dig','All',this)">All</button>
+      <button class="filter-btn" onclick="filterTable('dig','Critical',this)">Critical</button>
+      <button class="filter-btn" onclick="filterTable('dig','High',this)">High</button>
+      <button class="filter-btn" onclick="filterTable('dig','Medium',this)">Medium</button>
+      <button class="filter-btn" onclick="filterTable('dig','Low',this)">Low</button>
+      <input class="text-input" style="max-width:200px;margin-left:auto" placeholder="Search user or job..." oninput="searchTable('dig',this.value)"/>
+    </div>
+    <div class="table-wrap">
+      <table class="risk-table">
+        <thead><tr>
+          <th onclick="sortTable('dig','label')">User</th>
+          <th onclick="sortTable('dig','job')">Job Family</th>
+          <th onclick="sortTable('dig','score')">Score</th>
+          <th>Tier</th>
+          <th onclick="sortTable('dig','total')">Total Ents</th>
+          <th onclick="sortTable('dig','priv')">Privileged</th>
+          <th onclick="sortTable('dig','unassoc')">Unassociated</th>
+          <th onclick="sortTable('dig','zscore')">Z-Score</th>
+          <th>Inactive</th>
+        </tr></thead>
+        <tbody id="dig-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ USER LOOKUP -->
+<div id="page-lookup" class="page">
+  <div class="band" style="padding-bottom:32px">
+    <div class="caption-upper" style="margin-bottom:0.75rem">User Lookup</div>
+    <h1 class="display-lg" style="margin-bottom:0.5rem">Full Risk Profile</h1>
+    <p style="color:var(--muted);font-size:0.85rem;max-width:480px">Search any user by label to see their complete physical and digital signal breakdown with a plain-English risk explanation.</p>
+  </div>
+  <div class="band" style="padding-top:0">
+    <div style="display:flex;gap:0.75rem;max-width:480px">
+      <input id="lookup-input" class="text-input" placeholder="e.g. User 6976" oninput="lookupUser(this.value)" style="flex:1"/>
+    </div>
+    <!-- Autocomplete suggestions -->
+    <div id="lookup-suggestions" style="max-width:480px;background:var(--canvas);border:1px solid var(--hairline);border-radius:var(--r-md);margin-top:4px;display:none;max-height:200px;overflow-y:auto"></div>
+
+    <div id="lookup-result">
+      <div class="lookup-header">
+        <div>
+          <div class="caption-upper" style="color:var(--on-dark-soft);margin-bottom:0.25rem">Risk Profile</div>
+          <div class="lookup-user-name" id="lu-name"></div>
+        </div>
+        <div style="margin-left:auto;text-align:right">
+          <div id="lu-phys-tier" class="tier-badge" style="margin-bottom:0.4rem;display:block;width:fit-content;margin-left:auto"></div>
+          <div id="lu-dig-tier" class="tier-badge" style="display:block;width:fit-content;margin-left:auto"></div>
+        </div>
+      </div>
+
+      <div class="two-col" style="gap:1.5rem">
+        <div>
+          <div class="caption-upper" style="color:var(--on-dark-soft);margin-bottom:1rem">Physical Signals</div>
+          <div class="signal-grid" id="lu-phys-signals"></div>
+        </div>
+        <div>
+          <div class="caption-upper" style="color:var(--on-dark-soft);margin-bottom:1rem">Digital Signals</div>
+          <div class="signal-grid" id="lu-dig-signals"></div>
+        </div>
+      </div>
+
+      <div class="caption-upper" style="color:var(--on-dark-soft);margin-top:1.5rem;margin-bottom:0.5rem">Risk Explanation</div>
+      <div class="briefing-text" id="lu-explanation"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ SIMULATOR -->
+<div id="page-simulator" class="page">
+  <div class="band" style="padding-bottom:32px">
+    <div class="caption-upper" style="margin-bottom:0.75rem">What-If Simulator</div>
+    <h1 class="display-lg" style="margin-bottom:0.5rem">Adjust Signal Weights</h1>
+    <p style="color:var(--muted);font-size:0.85rem;max-width:520px">Move the sliders to change how each signal is weighted. The rankings update in real time. This demonstrates that the model is principled and tunable, not a black box.</p>
+  </div>
+
+  <!-- Dark band for simulator -->
+  <div style="background:var(--surface-dark);padding:48px 0">
+    <div style="max-width:1200px;margin:0 auto;padding:0 2rem">
+      <div class="two-col">
+        <div>
+          <div class="caption-upper" style="color:var(--on-dark-soft);margin-bottom:1.5rem">Physical Signal Weights</div>
+          <div id="phys-sliders"></div>
+          <div class="divider-dark"></div>
+          <div class="caption-upper" style="color:var(--on-dark-soft);margin-bottom:1.5rem">Digital Signal Weights</div>
+          <div id="dig-sliders"></div>
+          <div style="margin-top:1rem;font-size:0.75rem;color:var(--on-dark-soft)">Weights are normalized automatically. Total does not need to equal 100.</div>
+        </div>
+        <div>
+          <div class="caption-upper" style="color:var(--on-dark-soft);margin-bottom:1rem">Top 10 Physical (reranked)</div>
+          <div id="sim-phys-list" style="margin-bottom:2rem"></div>
+          <div class="caption-upper" style="color:var(--on-dark-soft);margin-bottom:1rem">Top 10 Digital (reranked)</div>
+          <div id="sim-dig-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════ OVERLAP -->
+<div id="page-overlap" class="page">
+  <div class="band" style="padding-bottom:32px">
+    <div class="caption-upper" style="margin-bottom:0.75rem">The Aha Moment &middot; Solution Approach</div>
+    <h1 class="display-lg" style="margin-bottom:0.75rem">Two Systems.<br><em class="coral">Same Users.</em></h1>
+    <p style="color:var(--muted);font-size:0.9rem;max-width:520px;line-height:1.7">The physical and digital analyses were run completely independently with no awareness of each other. The users below surface at the top of both lists simultaneously.</p>
+  </div>
+
+  <div class="callout-coral" style="margin:0 2rem 0;max-width:1200px;margin-left:auto;margin-right:auto">
+    <div class="caption-upper">Key Finding</div>
+    <p><strong>User 6976</strong> holds <strong>45 unassociated entitlements</strong>, more than any other identity in the dataset. These exist completely outside any assigned role or access profile. This same user scores in the top tier for after-hours badge activity. Two independent systems. One user. Zero prior visibility.</p>
+  </div>
+
+  <div class="band" style="padding-top:2rem">
+    <div class="two-col" style="margin-bottom:3rem">
+      <div style="border:1px solid var(--hairline);border-radius:var(--r-lg);overflow:hidden">
+        <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--hairline);background:var(--surface-soft);display:flex;align-items:center;gap:0.75rem">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--error)"></div>
+          <div style="font-weight:500;font-size:0.9rem;color:var(--ink)">Top Physical Risk</div>
+        </div>
+        <div style="max-height:420px;overflow-y:auto">
+          <table class="risk-table"><thead><tr>
+            <th>User</th><th>Score</th><th>Tier</th><th>After-Hrs</th><th>Rapid</th>
+          </tr></thead><tbody id="overlap-phys-tbody"></tbody></table>
+        </div>
+      </div>
+      <div style="border:1px solid var(--hairline);border-radius:var(--r-lg);overflow:hidden">
+        <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--hairline);background:var(--surface-soft);display:flex;align-items:center;gap:0.75rem">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--accent-amber)"></div>
+          <div style="font-weight:500;font-size:0.9rem;color:var(--ink)">Top Digital Risk</div>
+        </div>
+        <div style="max-height:420px;overflow-y:auto">
+          <table class="risk-table"><thead><tr>
+            <th>User</th><th>Job</th><th>Score</th><th>Tier</th><th>Unassoc</th><th>Inactive</th>
+          </tr></thead><tbody id="overlap-dig-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Radar -->
+    <div class="two-col">
+      <div>
+        <div class="caption-upper" style="margin-bottom:1rem">User 6976 Risk Profile</div>
+        <canvas id="radar" width="360" height="360"></canvas>
+      </div>
+      <div>
+        <div class="caption-upper" style="margin-bottom:1rem">Signal Breakdown</div>
+        <div id="radar-legend" style="margin-bottom:1.5rem"></div>
+        <div style="background:var(--surface-card);border-radius:var(--r-lg);padding:1.25rem;border-left:3px solid var(--primary)">
+          <div class="caption-upper" style="margin-bottom:0.5rem">Methodology</div>
+          <p style="font-size:0.82rem;color:var(--muted);line-height:1.7">Physical: after-hours rate, reader z-score, physical footprint, rapid succession, weekend-only pattern, avg dwell time.<br><br>Digital: entitlement z-score vs job peers, privileged count, unassociated entitlements, inactive identity with active access.<br><br>Each signal normalized 0&ndash;100, weighted, binned into Critical / High / Medium / Low.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+const PHYS = [{"label": "20a6bd5a3f26", "score": 78.2, "tier": "Critical", "afterhrs": 1352, "afterhrs_rt": "100.0%", "zscore": 8.45, "footprint": 37, "rapid": 63, "dwell": 11.6, "wkend_pct": "17%", "s_afterhrs": 100.0, "s_zscore": 86.0, "s_footprint": 19.7, "s_rapid": 100.0, "s_weekend": 0.0, "s_dwell": 75.3}, {"label": "bab990b110dd", "score": 71.2, "tier": "High", "afterhrs": 1426, "afterhrs_rt": "72.1%", "zscore": 20.89, "footprint": 31, "rapid": 65, "dwell": 15.0, "wkend_pct": "5%", "s_afterhrs": 72.1, "s_zscore": 100.0, "s_footprint": 16.4, "s_rapid": 100.0, "s_weekend": 0.0, "s_dwell": 97.5}, {"label": "a2ca6db4315a", "score": 69.9, "tier": "High", "afterhrs": 595, "afterhrs_rt": "100.0%", "zscore": 12.53, "footprint": 12, "rapid": 0, "dwell": 12.2, "wkend_pct": "18%", "s_afterhrs": 100.0, "s_zscore": 100.0, "s_footprint": 6.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 79.2}, {"label": "2558e204ff30", "score": 68.6, "tier": "High", "afterhrs": 652, "afterhrs_rt": "82.8%", "zscore": 10.72, "footprint": 23, "rapid": 26, "dwell": 10.6, "wkend_pct": "20%", "s_afterhrs": 82.8, "s_zscore": 100.0, "s_footprint": 12.0, "s_rapid": 52.0, "s_weekend": 0.0, "s_dwell": 68.8}, {"label": "1188860c51fe", "score": 62.0, "tier": "High", "afterhrs": 1014, "afterhrs_rt": "59.2%", "zscore": 16.08, "footprint": 9, "rapid": 51, "dwell": 8.3, "wkend_pct": "18%", "s_afterhrs": 59.2, "s_zscore": 100.0, "s_footprint": 4.4, "s_rapid": 100.0, "s_weekend": 0.0, "s_dwell": 53.6}, {"label": "6b5e3fa282de", "score": 61.6, "tier": "High", "afterhrs": 503, "afterhrs_rt": "100.0%", "zscore": 6.13, "footprint": 9, "rapid": 1, "dwell": 13.7, "wkend_pct": "14%", "s_afterhrs": 100.0, "s_zscore": 65.0, "s_footprint": 4.4, "s_rapid": 2.0, "s_weekend": 0.0, "s_dwell": 89.1}, {"label": "21053a353f76", "score": 60.8, "tier": "High", "afterhrs": 541, "afterhrs_rt": "97.5%", "zscore": 6.77, "footprint": 7, "rapid": 0, "dwell": 11.2, "wkend_pct": "21%", "s_afterhrs": 97.5, "s_zscore": 70.8, "s_footprint": 3.3, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 72.4}, {"label": "6c08234b3636", "score": 60.1, "tier": "High", "afterhrs": 545, "afterhrs_rt": "100.0%", "zscore": 4.9, "footprint": 39, "rapid": 2, "dwell": 9.5, "wkend_pct": "6%", "s_afterhrs": 100.0, "s_zscore": 53.9, "s_footprint": 20.8, "s_rapid": 4.0, "s_weekend": 0.0, "s_dwell": 61.5}, {"label": "035cbc4b2faf", "score": 59.5, "tier": "High", "afterhrs": 214, "afterhrs_rt": "100.0%", "zscore": 6.44, "footprint": 10, "rapid": 0, "dwell": 5.5, "wkend_pct": "8%", "s_afterhrs": 100.0, "s_zscore": 67.8, "s_footprint": 4.9, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 36.0}, {"label": "60ca7f05e1a8", "score": 58.2, "tier": "High", "afterhrs": 951, "afterhrs_rt": "87.3%", "zscore": 6.49, "footprint": 18, "rapid": 2, "dwell": 13.7, "wkend_pct": "11%", "s_afterhrs": 87.3, "s_zscore": 68.3, "s_footprint": 9.3, "s_rapid": 4.0, "s_weekend": 0.0, "s_dwell": 89.2}, {"label": "2e8ace015fd9", "score": 58.1, "tier": "High", "afterhrs": 132, "afterhrs_rt": "100.0%", "zscore": 2.78, "footprint": 3, "rapid": 2, "dwell": 11.8, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 34.7, "s_footprint": 1.1, "s_rapid": 4.0, "s_weekend": 100.0, "s_dwell": 76.6}, {"label": "73abfce59155", "score": 58.0, "tier": "High", "afterhrs": 821, "afterhrs_rt": "100.0%", "zscore": 3.87, "footprint": 36, "rapid": 0, "dwell": 12.2, "wkend_pct": "27%", "s_afterhrs": 100.0, "s_zscore": 44.6, "s_footprint": 19.1, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 78.9}, {"label": "e87d7b8f30ee", "score": 57.0, "tier": "High", "afterhrs": 706, "afterhrs_rt": "37.7%", "zscore": 11.82, "footprint": 51, "rapid": 58, "dwell": 8.5, "wkend_pct": "0%", "s_afterhrs": 37.7, "s_zscore": 100.0, "s_footprint": 27.3, "s_rapid": 100.0, "s_weekend": 0.0, "s_dwell": 55.3}, {"label": "faa620914056", "score": 56.0, "tier": "High", "afterhrs": 1289, "afterhrs_rt": "59.7%", "zscore": 5.94, "footprint": 25, "rapid": 70, "dwell": 13.3, "wkend_pct": "26%", "s_afterhrs": 59.7, "s_zscore": 63.3, "s_footprint": 13.1, "s_rapid": 100.0, "s_weekend": 0.0, "s_dwell": 86.0}, {"label": "40c7b89ca78f", "score": 55.9, "tier": "High", "afterhrs": 88, "afterhrs_rt": "100.0%", "zscore": 2.51, "footprint": 8, "rapid": 0, "dwell": 7.1, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 32.3, "s_footprint": 3.8, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 46.1}, {"label": "0962634bc627", "score": 55.7, "tier": "High", "afterhrs": 231, "afterhrs_rt": "100.0%", "zscore": 2.32, "footprint": 5, "rapid": 2, "dwell": 7.2, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 30.6, "s_footprint": 2.2, "s_rapid": 4.0, "s_weekend": 100.0, "s_dwell": 47.0}, {"label": "ccce40804537", "score": 55.4, "tier": "High", "afterhrs": 1090, "afterhrs_rt": "33.7%", "zscore": 8.16, "footprint": 100, "rapid": 161, "dwell": 9.3, "wkend_pct": "0%", "s_afterhrs": 33.7, "s_zscore": 83.3, "s_footprint": 54.1, "s_rapid": 100.0, "s_weekend": 0.0, "s_dwell": 60.6}, {"label": "2cc94bc32bcd", "score": 55.1, "tier": "High", "afterhrs": 279, "afterhrs_rt": "100.0%", "zscore": 4.0, "footprint": 10, "rapid": 0, "dwell": 8.9, "wkend_pct": "13%", "s_afterhrs": 100.0, "s_zscore": 45.8, "s_footprint": 4.9, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 57.6}, {"label": "2ee311a1a95f", "score": 55.1, "tier": "High", "afterhrs": 337, "afterhrs_rt": "91.8%", "zscore": 5.56, "footprint": 12, "rapid": 2, "dwell": 6.3, "wkend_pct": "24%", "s_afterhrs": 91.8, "s_zscore": 59.9, "s_footprint": 6.0, "s_rapid": 4.0, "s_weekend": 0.0, "s_dwell": 41.0}, {"label": "653bff83d858", "score": 54.9, "tier": "High", "afterhrs": 555, "afterhrs_rt": "100.0%", "zscore": 3.39, "footprint": 20, "rapid": 0, "dwell": 10.1, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 40.2, "s_footprint": 10.4, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 65.8}, {"label": "eea5310b3f61", "score": 54.2, "tier": "High", "afterhrs": 224, "afterhrs_rt": "100.0%", "zscore": 4.83, "footprint": 8, "rapid": 0, "dwell": 0.8, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 53.3, "s_footprint": 3.8, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 5.5}, {"label": "31454212b2d6", "score": 53.7, "tier": "High", "afterhrs": 240, "afterhrs_rt": "100.0%", "zscore": 4.18, "footprint": 10, "rapid": 0, "dwell": 3.3, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 47.4, "s_footprint": 4.9, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 21.5}, {"label": "792a0212f39f", "score": 53.3, "tier": "High", "afterhrs": 361, "afterhrs_rt": "78.5%", "zscore": 7.2, "footprint": 12, "rapid": 2, "dwell": 6.1, "wkend_pct": "33%", "s_afterhrs": 78.5, "s_zscore": 74.7, "s_footprint": 6.0, "s_rapid": 4.0, "s_weekend": 0.0, "s_dwell": 39.5}, {"label": "c61b94a3a0aa", "score": 53.2, "tier": "High", "afterhrs": 291, "afterhrs_rt": "99.0%", "zscore": 4.62, "footprint": 5, "rapid": 0, "dwell": 1.4, "wkend_pct": "0%", "s_afterhrs": 99.0, "s_zscore": 51.4, "s_footprint": 2.2, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 8.8}, {"label": "5454631e9384", "score": 53.0, "tier": "High", "afterhrs": 178, "afterhrs_rt": "93.2%", "zscore": 1.92, "footprint": 6, "rapid": 0, "dwell": 10.9, "wkend_pct": "93%", "s_afterhrs": 93.2, "s_zscore": 27.0, "s_footprint": 2.7, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 70.5}, {"label": "d558213b17ed", "score": 52.8, "tier": "High", "afterhrs": 299, "afterhrs_rt": "83.1%", "zscore": 6.91, "footprint": 5, "rapid": 1, "dwell": 3.1, "wkend_pct": "22%", "s_afterhrs": 83.1, "s_zscore": 72.0, "s_footprint": 2.2, "s_rapid": 2.0, "s_weekend": 0.0, "s_dwell": 20.1}, {"label": "b79707f91daa", "score": 52.7, "tier": "High", "afterhrs": 128, "afterhrs_rt": "97.0%", "zscore": 2.43, "footprint": 7, "rapid": 25, "dwell": 1.5, "wkend_pct": "26%", "s_afterhrs": 97.0, "s_zscore": 31.5, "s_footprint": 3.3, "s_rapid": 50.0, "s_weekend": 0.0, "s_dwell": 10.0}, {"label": "d46dc686cb50", "score": 52.2, "tier": "High", "afterhrs": 90, "afterhrs_rt": "100.0%", "zscore": 1.35, "footprint": 4, "rapid": 2, "dwell": 3.4, "wkend_pct": "98%", "s_afterhrs": 100.0, "s_zscore": 21.8, "s_footprint": 1.6, "s_rapid": 4.0, "s_weekend": 100.0, "s_dwell": 22.2}, {"label": "28dc86f9e077", "score": 51.9, "tier": "High", "afterhrs": 493, "afterhrs_rt": "68.9%", "zscore": 5.9, "footprint": 14, "rapid": 23, "dwell": 9.0, "wkend_pct": "0%", "s_afterhrs": 68.9, "s_zscore": 62.9, "s_footprint": 7.1, "s_rapid": 46.0, "s_weekend": 0.0, "s_dwell": 58.7}, {"label": "5854b968c6fc", "score": 51.7, "tier": "High", "afterhrs": 156, "afterhrs_rt": "100.0%", "zscore": 0.47, "footprint": 5, "rapid": 0, "dwell": 9.1, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 13.9, "s_footprint": 2.2, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 58.9}, {"label": "fff428392255", "score": 51.3, "tier": "High", "afterhrs": 67, "afterhrs_rt": "100.0%", "zscore": 0.3, "footprint": 4, "rapid": 0, "dwell": 9.3, "wkend_pct": "99%", "s_afterhrs": 100.0, "s_zscore": 12.3, "s_footprint": 1.6, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 60.3}, {"label": "8647967fba30", "score": 51.3, "tier": "High", "afterhrs": 37, "afterhrs_rt": "100.0%", "zscore": -0.04, "footprint": 2, "rapid": 0, "dwell": 11.9, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 9.3, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 77.5}, {"label": "55cb8ccd8a12", "score": 50.7, "tier": "High", "afterhrs": 91, "afterhrs_rt": "100.0%", "zscore": 0.38, "footprint": 4, "rapid": 0, "dwell": 6.7, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 13.1, "s_footprint": 1.6, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 43.5}, {"label": "b48c58e5ceba", "score": 50.6, "tier": "High", "afterhrs": 408, "afterhrs_rt": "99.5%", "zscore": 3.23, "footprint": 9, "rapid": 0, "dwell": 1.5, "wkend_pct": "4%", "s_afterhrs": 99.5, "s_zscore": 38.8, "s_footprint": 4.4, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 9.5}, {"label": "4f3a1535ba26", "score": 50.5, "tier": "High", "afterhrs": 11, "afterhrs_rt": "100.0%", "zscore": -0.37, "footprint": 2, "rapid": 0, "dwell": 11.9, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 6.3, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 77.0}, {"label": "0f4276474939", "score": 50.5, "tier": "High", "afterhrs": 20, "afterhrs_rt": "100.0%", "zscore": -0.21, "footprint": 7, "rapid": 2, "dwell": 8.2, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 7.7, "s_footprint": 3.3, "s_rapid": 4.0, "s_weekend": 100.0, "s_dwell": 53.0}, {"label": "f17324e783a1", "score": 50.1, "tier": "High", "afterhrs": 976, "afterhrs_rt": "54.9%", "zscore": 3.15, "footprint": 54, "rapid": 65, "dwell": 13.1, "wkend_pct": "23%", "s_afterhrs": 54.9, "s_zscore": 38.1, "s_footprint": 29.0, "s_rapid": 100.0, "s_weekend": 0.0, "s_dwell": 85.0}, {"label": "15b0571728ca", "score": 50.0, "tier": "Medium", "afterhrs": 188, "afterhrs_rt": "98.4%", "zscore": 0.01, "footprint": 7, "rapid": 0, "dwell": 8.2, "wkend_pct": "97%", "s_afterhrs": 98.4, "s_zscore": 9.7, "s_footprint": 3.3, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 53.2}, {"label": "d794851fccb8", "score": 49.4, "tier": "Medium", "afterhrs": 726, "afterhrs_rt": "74.1%", "zscore": 6.28, "footprint": 15, "rapid": 0, "dwell": 6.4, "wkend_pct": "55%", "s_afterhrs": 74.1, "s_zscore": 66.4, "s_footprint": 7.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 41.3}, {"label": "e62e725002f1", "score": 49.4, "tier": "Medium", "afterhrs": 51, "afterhrs_rt": "100.0%", "zscore": 2.93, "footprint": 4, "rapid": 0, "dwell": 0.3, "wkend_pct": "67%", "s_afterhrs": 100.0, "s_zscore": 36.1, "s_footprint": 1.6, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 1.9}, {"label": "a07d28c509fa", "score": 49.3, "tier": "Medium", "afterhrs": 220, "afterhrs_rt": "100.0%", "zscore": 2.4, "footprint": 6, "rapid": 0, "dwell": 3.2, "wkend_pct": "13%", "s_afterhrs": 100.0, "s_zscore": 31.3, "s_footprint": 2.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 21.0}, {"label": "3e659bc7365e", "score": 49.1, "tier": "Medium", "afterhrs": 210, "afterhrs_rt": "100.0%", "zscore": 2.8, "footprint": 5, "rapid": 0, "dwell": 0.1, "wkend_pct": "23%", "s_afterhrs": 100.0, "s_zscore": 34.9, "s_footprint": 2.2, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.3}, {"label": "71528a388a18", "score": 49.0, "tier": "Medium", "afterhrs": 27, "afterhrs_rt": "100.0%", "zscore": -0.15, "footprint": 2, "rapid": 0, "dwell": 5.7, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 8.2, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 36.8}, {"label": "71feebad2f83", "score": 49.0, "tier": "Medium", "afterhrs": 248, "afterhrs_rt": "91.9%", "zscore": 4.05, "footprint": 5, "rapid": 0, "dwell": 1.0, "wkend_pct": "20%", "s_afterhrs": 91.9, "s_zscore": 46.2, "s_footprint": 2.2, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 6.7}, {"label": "d1969b4bb375", "score": 48.9, "tier": "Medium", "afterhrs": 141, "afterhrs_rt": "100.0%", "zscore": 2.81, "footprint": 2, "rapid": 0, "dwell": 0.3, "wkend_pct": "18%", "s_afterhrs": 100.0, "s_zscore": 35.0, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 2.3}, {"label": "df68dd9e4b79", "score": 48.8, "tier": "Medium", "afterhrs": 27, "afterhrs_rt": "100.0%", "zscore": -0.31, "footprint": 2, "rapid": 0, "dwell": 6.3, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 6.8, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 40.9}, {"label": "4a7ca08533ef", "score": 48.8, "tier": "Medium", "afterhrs": 329, "afterhrs_rt": "43.9%", "zscore": 2.77, "footprint": 141, "rapid": 41, "dwell": 8.9, "wkend_pct": "2%", "s_afterhrs": 43.9, "s_zscore": 34.7, "s_footprint": 76.5, "s_rapid": 82.0, "s_weekend": 0.0, "s_dwell": 57.8}, {"label": "6449afb01de0", "score": 48.7, "tier": "Medium", "afterhrs": 38, "afterhrs_rt": "100.0%", "zscore": -0.49, "footprint": 2, "rapid": 0, "dwell": 7.1, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 5.2, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 46.2}, {"label": "b8757ac7655e", "score": 48.3, "tier": "Medium", "afterhrs": 152, "afterhrs_rt": "100.0%", "zscore": 2.5, "footprint": 4, "rapid": 0, "dwell": 0.0, "wkend_pct": "3%", "s_afterhrs": 100.0, "s_zscore": 32.2, "s_footprint": 1.6, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.3}, {"label": "b453379dc4f1", "score": 48.3, "tier": "Medium", "afterhrs": 27, "afterhrs_rt": "100.0%", "zscore": 0.32, "footprint": 1, "rapid": 0, "dwell": 0.4, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 12.5, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 2.5}, {"label": "4b8217ea37fb", "score": 48.1, "tier": "Medium", "afterhrs": 253, "afterhrs_rt": "97.7%", "zscore": 2.5, "footprint": 6, "rapid": 0, "dwell": 1.7, "wkend_pct": "26%", "s_afterhrs": 97.7, "s_zscore": 32.2, "s_footprint": 2.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 11.1}, {"label": "c27ac4412897", "score": 48.0, "tier": "Medium", "afterhrs": 434, "afterhrs_rt": "76.1%", "zscore": 4.46, "footprint": 2, "rapid": 0, "dwell": 15.4, "wkend_pct": "9%", "s_afterhrs": 76.1, "s_zscore": 49.9, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 100.0}, {"label": "65284c14550b", "score": 48.0, "tier": "Medium", "afterhrs": 29, "afterhrs_rt": "100.0%", "zscore": -0.37, "footprint": 4, "rapid": 0, "dwell": 3.5, "wkend_pct": "83%", "s_afterhrs": 100.0, "s_zscore": 6.3, "s_footprint": 1.6, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 22.8}, {"label": "e90eeb1841d0", "score": 47.7, "tier": "Medium", "afterhrs": 75, "afterhrs_rt": "97.4%", "zscore": 2.4, "footprint": 2, "rapid": 0, "dwell": 2.4, "wkend_pct": "12%", "s_afterhrs": 97.4, "s_zscore": 31.3, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 15.8}, {"label": "e85e7cbda962", "score": 47.6, "tier": "Medium", "afterhrs": 39, "afterhrs_rt": "97.5%", "zscore": -0.39, "footprint": 7, "rapid": 0, "dwell": 4.9, "wkend_pct": "98%", "s_afterhrs": 97.5, "s_zscore": 6.1, "s_footprint": 3.3, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 31.7}, {"label": "78fb46291f65", "score": 47.5, "tier": "Medium", "afterhrs": 300, "afterhrs_rt": "90.1%", "zscore": 2.84, "footprint": 18, "rapid": 0, "dwell": 4.0, "wkend_pct": "16%", "s_afterhrs": 90.1, "s_zscore": 35.3, "s_footprint": 9.3, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 25.7}, {"label": "074cf2334509", "score": 47.5, "tier": "Medium", "afterhrs": 298, "afterhrs_rt": "92.0%", "zscore": 2.75, "footprint": 9, "rapid": 3, "dwell": 2.7, "wkend_pct": "24%", "s_afterhrs": 92.0, "s_zscore": 34.5, "s_footprint": 4.4, "s_rapid": 6.0, "s_weekend": 0.0, "s_dwell": 17.2}, {"label": "d029e6c1c167", "score": 47.3, "tier": "Medium", "afterhrs": 39, "afterhrs_rt": "92.9%", "zscore": 0.08, "footprint": 7, "rapid": 0, "dwell": 6.5, "wkend_pct": "86%", "s_afterhrs": 92.9, "s_zscore": 10.4, "s_footprint": 3.3, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 42.2}, {"label": "0498fbaab04a", "score": 47.3, "tier": "Medium", "afterhrs": 9, "afterhrs_rt": "100.0%", "zscore": -0.61, "footprint": 4, "rapid": 0, "dwell": 3.1, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 4.1, "s_footprint": 1.6, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 20.3}, {"label": "da714b100089", "score": 47.3, "tier": "Medium", "afterhrs": 173, "afterhrs_rt": "88.3%", "zscore": 3.16, "footprint": 10, "rapid": 0, "dwell": 5.2, "wkend_pct": "32%", "s_afterhrs": 88.3, "s_zscore": 38.2, "s_footprint": 4.9, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 33.5}, {"label": "4e6338af91fd", "score": 47.2, "tier": "Medium", "afterhrs": 67, "afterhrs_rt": "100.0%", "zscore": 1.8, "footprint": 9, "rapid": 0, "dwell": 0.4, "wkend_pct": "28%", "s_afterhrs": 100.0, "s_zscore": 25.9, "s_footprint": 4.4, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 2.6}, {"label": "c4fc576b57aa", "score": 47.2, "tier": "Medium", "afterhrs": 10, "afterhrs_rt": "100.0%", "zscore": -0.34, "footprint": 7, "rapid": 0, "dwell": 0.3, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 3.3, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 2.1}, {"label": "0829b6bc2c87", "score": 47.1, "tier": "Medium", "afterhrs": 171, "afterhrs_rt": "100.0%", "zscore": 0.83, "footprint": 5, "rapid": 0, "dwell": 7.7, "wkend_pct": "71%", "s_afterhrs": 100.0, "s_zscore": 17.2, "s_footprint": 2.2, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 50.0}, {"label": "b11180705c13", "score": 47.1, "tier": "Medium", "afterhrs": 77, "afterhrs_rt": "96.2%", "zscore": 2.53, "footprint": 5, "rapid": 0, "dwell": 0.3, "wkend_pct": "16%", "s_afterhrs": 96.2, "s_zscore": 32.5, "s_footprint": 2.2, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 2.1}, {"label": "875f8bbb6df3", "score": 47.0, "tier": "Medium", "afterhrs": 10, "afterhrs_rt": "100.0%", "zscore": -0.29, "footprint": 1, "rapid": 0, "dwell": 0.7, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 7.0, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 4.4}, {"label": "ce8d7cd468ee", "score": 47.0, "tier": "Medium", "afterhrs": 3, "afterhrs_rt": "100.0%", "zscore": -0.34, "footprint": 2, "rapid": 0, "dwell": 0.7, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 4.8}, {"label": "a1d2d0380d33", "score": 46.9, "tier": "Medium", "afterhrs": 5, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 5, "rapid": 0, "dwell": 0.1, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 2.2, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.5}, {"label": "d5ffbc5dc190", "score": 46.8, "tier": "Medium", "afterhrs": 8, "afterhrs_rt": "100.0%", "zscore": -0.37, "footprint": 2, "rapid": 0, "dwell": 0.5, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 6.3, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 3.2}, {"label": "658bac0403cf", "score": 46.7, "tier": "Medium", "afterhrs": 199, "afterhrs_rt": "100.0%", "zscore": 0.82, "footprint": 7, "rapid": 0, "dwell": 6.0, "wkend_pct": "33%", "s_afterhrs": 100.0, "s_zscore": 17.1, "s_footprint": 3.3, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 38.9}, {"label": "cfebd2743d72", "score": 46.6, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.35, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.1}, {"label": "631be5d17492", "score": 46.6, "tier": "Medium", "afterhrs": 498, "afterhrs_rt": "69.1%", "zscore": 4.97, "footprint": 15, "rapid": 0, "dwell": 12.9, "wkend_pct": "41%", "s_afterhrs": 69.1, "s_zscore": 54.5, "s_footprint": 7.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 83.9}, {"label": "64613e27e64e", "score": 46.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "202cbc19e90d", "score": 46.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "5563a117c72f", "score": 46.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "95533a8951c1", "score": 46.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "c556cedac586", "score": 46.5, "tier": "Medium", "afterhrs": 172, "afterhrs_rt": "100.0%", "zscore": 1.26, "footprint": 9, "rapid": 0, "dwell": 1.8, "wkend_pct": "52%", "s_afterhrs": 100.0, "s_zscore": 21.0, "s_footprint": 4.4, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 11.8}, {"label": "a712c925d7ee", "score": 46.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.41, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 5.9, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "f738881691d2", "score": 46.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.42, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 5.9, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "01f2d0624cc0", "score": 46.4, "tier": "Medium", "afterhrs": 7, "afterhrs_rt": "100.0%", "zscore": -0.46, "footprint": 2, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 5.4, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.1}, {"label": "755c31f2c5db", "score": 46.4, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.43, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 5.8, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "a22edfaad87c", "score": 46.4, "tier": "Medium", "afterhrs": 3, "afterhrs_rt": "100.0%", "zscore": -0.43, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 5.7, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "2c42f5669626", "score": 46.4, "tier": "Medium", "afterhrs": 257, "afterhrs_rt": "94.1%", "zscore": 2.05, "footprint": 11, "rapid": 0, "dwell": 2.8, "wkend_pct": "23%", "s_afterhrs": 94.1, "s_zscore": 28.1, "s_footprint": 5.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 18.0}, {"label": "6e93cd0741cd", "score": 46.4, "tier": "Medium", "afterhrs": 194, "afterhrs_rt": "76.7%", "zscore": 2.78, "footprint": 64, "rapid": 7, "dwell": 1.5, "wkend_pct": "43%", "s_afterhrs": 76.7, "s_zscore": 34.7, "s_footprint": 34.4, "s_rapid": 14.0, "s_weekend": 0.0, "s_dwell": 9.7}, {"label": "937c0ae64d9d", "score": 46.4, "tier": "Medium", "afterhrs": 461, "afterhrs_rt": "77.9%", "zscore": 2.97, "footprint": 17, "rapid": 1, "dwell": 14.2, "wkend_pct": "39%", "s_afterhrs": 77.9, "s_zscore": 36.5, "s_footprint": 8.7, "s_rapid": 2.0, "s_weekend": 0.0, "s_dwell": 91.9}, {"label": "4cb55d8c58e3", "score": 46.3, "tier": "Medium", "afterhrs": 309, "afterhrs_rt": "85.6%", "zscore": 2.45, "footprint": 10, "rapid": 2, "dwell": 9.3, "wkend_pct": "12%", "s_afterhrs": 85.6, "s_zscore": 31.7, "s_footprint": 4.9, "s_rapid": 4.0, "s_weekend": 0.0, "s_dwell": 60.6}, {"label": "190ecb5fdfec", "score": 46.2, "tier": "Medium", "afterhrs": 238, "afterhrs_rt": "87.2%", "zscore": 2.84, "footprint": 3, "rapid": 0, "dwell": 7.3, "wkend_pct": "78%", "s_afterhrs": 87.2, "s_zscore": 35.3, "s_footprint": 1.1, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 47.7}, {"label": "a8a8ec037137", "score": 46.1, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.6, "footprint": 2, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 4.2, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "6c5a94b8683b", "score": 46.1, "tier": "Medium", "afterhrs": 630, "afterhrs_rt": "49.8%", "zscore": 6.45, "footprint": 40, "rapid": 8, "dwell": 13.7, "wkend_pct": "12%", "s_afterhrs": 49.8, "s_zscore": 67.9, "s_footprint": 21.3, "s_rapid": 16.0, "s_weekend": 0.0, "s_dwell": 88.6}, {"label": "61752f5cfab1", "score": 46.1, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.58, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 4.4, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "3134a49a9e11", "score": 46.0, "tier": "Medium", "afterhrs": 677, "afterhrs_rt": "65.7%", "zscore": 5.09, "footprint": 30, "rapid": 0, "dwell": 10.8, "wkend_pct": "41%", "s_afterhrs": 65.7, "s_zscore": 55.6, "s_footprint": 15.8, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 69.8}, {"label": "71118eafaa5b", "score": 46.0, "tier": "Medium", "afterhrs": 14, "afterhrs_rt": "93.3%", "zscore": -0.28, "footprint": 4, "rapid": 0, "dwell": 5.1, "wkend_pct": "93%", "s_afterhrs": 93.3, "s_zscore": 7.1, "s_footprint": 1.6, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 33.0}, {"label": "bbd1d227515e", "score": 45.9, "tier": "Medium", "afterhrs": 504, "afterhrs_rt": "63.4%", "zscore": 5.76, "footprint": 9, "rapid": 0, "dwell": 13.8, "wkend_pct": "30%", "s_afterhrs": 63.4, "s_zscore": 61.7, "s_footprint": 4.4, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 89.5}, {"label": "cf3b07200e82", "score": 45.8, "tier": "Medium", "afterhrs": 4, "afterhrs_rt": "100.0%", "zscore": -0.74, "footprint": 2, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 3.0, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "283d03c832f5", "score": 45.6, "tier": "Medium", "afterhrs": 303, "afterhrs_rt": "82.3%", "zscore": 2.9, "footprint": 19, "rapid": 7, "dwell": 2.6, "wkend_pct": "27%", "s_afterhrs": 82.3, "s_zscore": 35.8, "s_footprint": 9.8, "s_rapid": 14.0, "s_weekend": 0.0, "s_dwell": 17.0}, {"label": "3d7821a4d744", "score": 45.5, "tier": "Medium", "afterhrs": 377, "afterhrs_rt": "27.3%", "zscore": 7.02, "footprint": 67, "rapid": 40, "dwell": 9.0, "wkend_pct": "3%", "s_afterhrs": 27.3, "s_zscore": 73.1, "s_footprint": 36.1, "s_rapid": 80.0, "s_weekend": 0.0, "s_dwell": 58.1}, {"label": "2331f36b31bd", "score": 45.5, "tier": "Medium", "afterhrs": 389, "afterhrs_rt": "66.2%", "zscore": 4.76, "footprint": 20, "rapid": 0, "dwell": 13.2, "wkend_pct": "36%", "s_afterhrs": 66.2, "s_zscore": 52.7, "s_footprint": 10.4, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 85.4}, {"label": "c8351dc43dae", "score": 45.3, "tier": "Medium", "afterhrs": 231, "afterhrs_rt": "77.0%", "zscore": 4.22, "footprint": 10, "rapid": 0, "dwell": 5.6, "wkend_pct": "16%", "s_afterhrs": 77.0, "s_zscore": 47.8, "s_footprint": 4.9, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 36.4}, {"label": "6fad4ff830cc", "score": 45.2, "tier": "Medium", "afterhrs": 55, "afterhrs_rt": "91.7%", "zscore": 2.17, "footprint": 3, "rapid": 0, "dwell": 3.4, "wkend_pct": "8%", "s_afterhrs": 91.7, "s_zscore": 29.2, "s_footprint": 1.1, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 22.2}, {"label": "6e17cec95002", "score": 45.1, "tier": "Medium", "afterhrs": 46, "afterhrs_rt": "100.0%", "zscore": 0.87, "footprint": 7, "rapid": 0, "dwell": 0.8, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 17.5, "s_footprint": 3.3, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 5.1}, {"label": "daa6e4449f73", "score": 45.1, "tier": "Medium", "afterhrs": 3, "afterhrs_rt": "100.0%", "zscore": -1.03, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "100%", "s_afterhrs": 100.0, "s_zscore": 0.3, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 0.0}, {"label": "f26c30e0dcfb", "score": 44.8, "tier": "Medium", "afterhrs": 57, "afterhrs_rt": "98.3%", "zscore": 0.36, "footprint": 11, "rapid": 2, "dwell": 3.2, "wkend_pct": "79%", "s_afterhrs": 98.3, "s_zscore": 12.9, "s_footprint": 5.5, "s_rapid": 4.0, "s_weekend": 0.0, "s_dwell": 21.0}, {"label": "b5d6e52bf592", "score": 44.8, "tier": "Medium", "afterhrs": 494, "afterhrs_rt": "53.9%", "zscore": 5.57, "footprint": 29, "rapid": 11, "dwell": 11.6, "wkend_pct": "33%", "s_afterhrs": 53.9, "s_zscore": 60.0, "s_footprint": 15.3, "s_rapid": 22.0, "s_weekend": 0.0, "s_dwell": 75.1}, {"label": "3ed6b6e2b947", "score": 44.7, "tier": "Medium", "afterhrs": 26, "afterhrs_rt": "100.0%", "zscore": -0.21, "footprint": 10, "rapid": 0, "dwell": 6.2, "wkend_pct": "4%", "s_afterhrs": 100.0, "s_zscore": 7.7, "s_footprint": 4.9, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 40.3}, {"label": "c3d7594d6f7f", "score": 44.7, "tier": "Medium", "afterhrs": 223, "afterhrs_rt": "69.7%", "zscore": 4.55, "footprint": 26, "rapid": 0, "dwell": 6.4, "wkend_pct": "12%", "s_afterhrs": 69.7, "s_zscore": 50.7, "s_footprint": 13.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 41.3}, {"label": "57397240262d", "score": 44.6, "tier": "Medium", "afterhrs": 406, "afterhrs_rt": "79.8%", "zscore": 1.89, "footprint": 12, "rapid": 1, "dwell": 15.1, "wkend_pct": "31%", "s_afterhrs": 79.8, "s_zscore": 26.7, "s_footprint": 6.0, "s_rapid": 2.0, "s_weekend": 0.0, "s_dwell": 98.0}, {"label": "61769b3be813", "score": 44.4, "tier": "Medium", "afterhrs": 35, "afterhrs_rt": "100.0%", "zscore": 0.58, "footprint": 7, "rapid": 0, "dwell": 0.5, "wkend_pct": "77%", "s_afterhrs": 100.0, "s_zscore": 14.9, "s_footprint": 3.3, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 3.5}, {"label": "40cd553c6ccc", "score": 44.2, "tier": "Medium", "afterhrs": 1047, "afterhrs_rt": "54.2%", "zscore": 3.83, "footprint": 38, "rapid": 18, "dwell": 14.9, "wkend_pct": "22%", "s_afterhrs": 54.2, "s_zscore": 44.3, "s_footprint": 20.2, "s_rapid": 36.0, "s_weekend": 0.0, "s_dwell": 96.6}, {"label": "12f6f1f91cfb", "score": 44.0, "tier": "Medium", "afterhrs": 48, "afterhrs_rt": "92.3%", "zscore": -0.28, "footprint": 6, "rapid": 1, "dwell": 14.6, "wkend_pct": "40%", "s_afterhrs": 92.3, "s_zscore": 7.1, "s_footprint": 2.7, "s_rapid": 2.0, "s_weekend": 0.0, "s_dwell": 94.7}, {"label": "1cdc257ef2ee", "score": 43.9, "tier": "Medium", "afterhrs": 75, "afterhrs_rt": "100.0%", "zscore": 0.4, "footprint": 7, "rapid": 0, "dwell": 0.3, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 13.2, "s_footprint": 3.3, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 2.0}, {"label": "45a1bafad9a4", "score": 43.8, "tier": "Medium", "afterhrs": 108, "afterhrs_rt": "67.5%", "zscore": 5.04, "footprint": 14, "rapid": 0, "dwell": 6.1, "wkend_pct": "9%", "s_afterhrs": 67.5, "s_zscore": 55.2, "s_footprint": 7.1, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 39.3}, {"label": "9449411c6756", "score": 43.8, "tier": "Medium", "afterhrs": 636, "afterhrs_rt": "61.7%", "zscore": 4.97, "footprint": 14, "rapid": 0, "dwell": 13.6, "wkend_pct": "32%", "s_afterhrs": 61.7, "s_zscore": 54.6, "s_footprint": 7.1, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 88.5}, {"label": "4b35107592b0", "score": 43.8, "tier": "Medium", "afterhrs": 477, "afterhrs_rt": "77.9%", "zscore": 2.54, "footprint": 3, "rapid": 0, "dwell": 13.3, "wkend_pct": "7%", "s_afterhrs": 77.9, "s_zscore": 32.6, "s_footprint": 1.1, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 86.1}, {"label": "543cbb0823a4", "score": 43.8, "tier": "Medium", "afterhrs": 20, "afterhrs_rt": "100.0%", "zscore": 0.26, "footprint": 5, "rapid": 0, "dwell": 1.4, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 12.0, "s_footprint": 2.2, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 9.1}, {"label": "afdd6969050f", "score": 43.4, "tier": "Medium", "afterhrs": 292, "afterhrs_rt": "66.8%", "zscore": 3.85, "footprint": 17, "rapid": 0, "dwell": 13.1, "wkend_pct": "26%", "s_afterhrs": 66.8, "s_zscore": 44.4, "s_footprint": 8.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 85.2}, {"label": "61bb99583be2", "score": 43.3, "tier": "Medium", "afterhrs": 124, "afterhrs_rt": "98.4%", "zscore": 0.47, "footprint": 6, "rapid": 0, "dwell": 0.2, "wkend_pct": "7%", "s_afterhrs": 98.4, "s_zscore": 13.9, "s_footprint": 2.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 1.4}, {"label": "7c42a3695dca", "score": 43.3, "tier": "Medium", "afterhrs": 571, "afterhrs_rt": "67.9%", "zscore": 4.04, "footprint": 15, "rapid": 0, "dwell": 10.7, "wkend_pct": "9%", "s_afterhrs": 67.9, "s_zscore": 46.1, "s_footprint": 7.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 69.4}, {"label": "22bc9786927b", "score": 43.1, "tier": "Medium", "afterhrs": 250, "afterhrs_rt": "82.0%", "zscore": 2.15, "footprint": 13, "rapid": 0, "dwell": 6.3, "wkend_pct": "12%", "s_afterhrs": 82.0, "s_zscore": 29.0, "s_footprint": 6.6, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 40.9}, {"label": "75a285b18999", "score": 43.1, "tier": "Medium", "afterhrs": 10, "afterhrs_rt": "100.0%", "zscore": 0.25, "footprint": 2, "rapid": 0, "dwell": 0.0, "wkend_pct": "20%", "s_afterhrs": 100.0, "s_zscore": 11.9, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "77a38c53def3", "score": 43.0, "tier": "Medium", "afterhrs": 442, "afterhrs_rt": "64.2%", "zscore": 4.54, "footprint": 28, "rapid": 0, "dwell": 7.6, "wkend_pct": "11%", "s_afterhrs": 64.2, "s_zscore": 50.6, "s_footprint": 14.8, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 49.1}, {"label": "0f8520315714", "score": 43.0, "tier": "Medium", "afterhrs": 24, "afterhrs_rt": "100.0%", "zscore": 0.04, "footprint": 5, "rapid": 0, "dwell": 0.4, "wkend_pct": "8%", "s_afterhrs": 100.0, "s_zscore": 10.0, "s_footprint": 2.2, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 2.8}, {"label": "78f684389bc4", "score": 42.9, "tier": "Medium", "afterhrs": 335, "afterhrs_rt": "57.3%", "zscore": 4.92, "footprint": 30, "rapid": 0, "dwell": 12.7, "wkend_pct": "24%", "s_afterhrs": 57.3, "s_zscore": 54.1, "s_footprint": 15.8, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 82.4}, {"label": "172efccb67ee", "score": 42.9, "tier": "Medium", "afterhrs": 384, "afterhrs_rt": "52.5%", "zscore": 3.49, "footprint": 36, "rapid": 24, "dwell": 12.2, "wkend_pct": "26%", "s_afterhrs": 52.5, "s_zscore": 41.1, "s_footprint": 19.1, "s_rapid": 48.0, "s_weekend": 0.0, "s_dwell": 79.1}, {"label": "4dde436682f0", "score": 42.8, "tier": "Medium", "afterhrs": 328, "afterhrs_rt": "80.2%", "zscore": 1.81, "footprint": 12, "rapid": 0, "dwell": 10.2, "wkend_pct": "17%", "s_afterhrs": 80.2, "s_zscore": 26.0, "s_footprint": 6.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 65.9}, {"label": "ae40e2e7e5fa", "score": 42.8, "tier": "Medium", "afterhrs": 509, "afterhrs_rt": "63.1%", "zscore": 4.16, "footprint": 27, "rapid": 0, "dwell": 11.1, "wkend_pct": "36%", "s_afterhrs": 63.1, "s_zscore": 47.2, "s_footprint": 14.2, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 71.8}, {"label": "baabcee92b42", "score": 42.6, "tier": "Medium", "afterhrs": 156, "afterhrs_rt": "55.5%", "zscore": 6.03, "footprint": 29, "rapid": 0, "dwell": 6.3, "wkend_pct": "23%", "s_afterhrs": 55.5, "s_zscore": 64.1, "s_footprint": 15.3, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 40.8}, {"label": "87a751deb4c3", "score": 42.5, "tier": "Medium", "afterhrs": 207, "afterhrs_rt": "88.8%", "zscore": 0.71, "footprint": 13, "rapid": 0, "dwell": 6.1, "wkend_pct": "20%", "s_afterhrs": 88.8, "s_zscore": 16.0, "s_footprint": 6.6, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 39.4}, {"label": "a46a2328f560", "score": 42.3, "tier": "Medium", "afterhrs": 338, "afterhrs_rt": "79.3%", "zscore": 1.35, "footprint": 7, "rapid": 2, "dwell": 13.1, "wkend_pct": "10%", "s_afterhrs": 79.3, "s_zscore": 21.9, "s_footprint": 3.3, "s_rapid": 4.0, "s_weekend": 0.0, "s_dwell": 84.8}, {"label": "db6d7b1e9ccb", "score": 42.3, "tier": "Medium", "afterhrs": 96, "afterhrs_rt": "92.3%", "zscore": 0.28, "footprint": 7, "rapid": 0, "dwell": 5.7, "wkend_pct": "0%", "s_afterhrs": 92.3, "s_zscore": 12.2, "s_footprint": 3.3, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 37.2}, {"label": "5b4ba5a18279", "score": 42.3, "tier": "Medium", "afterhrs": 247, "afterhrs_rt": "68.0%", "zscore": 2.52, "footprint": 17, "rapid": 10, "dwell": 11.3, "wkend_pct": "29%", "s_afterhrs": 68.0, "s_zscore": 32.4, "s_footprint": 8.7, "s_rapid": 20.0, "s_weekend": 0.0, "s_dwell": 73.3}, {"label": "423679561501", "score": 42.3, "tier": "Medium", "afterhrs": 441, "afterhrs_rt": "65.6%", "zscore": 3.36, "footprint": 29, "rapid": 0, "dwell": 11.5, "wkend_pct": "32%", "s_afterhrs": 65.6, "s_zscore": 40.0, "s_footprint": 15.3, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 74.8}, {"label": "28038a7d98ac", "score": 42.2, "tier": "Medium", "afterhrs": 123, "afterhrs_rt": "76.9%", "zscore": 2.33, "footprint": 8, "rapid": 6, "dwell": 6.2, "wkend_pct": "26%", "s_afterhrs": 76.9, "s_zscore": 30.7, "s_footprint": 3.8, "s_rapid": 12.0, "s_weekend": 0.0, "s_dwell": 40.5}, {"label": "7b7c7b95ac5c", "score": 42.2, "tier": "Medium", "afterhrs": 122, "afterhrs_rt": "45.7%", "zscore": 7.84, "footprint": 7, "rapid": 0, "dwell": 10.3, "wkend_pct": "15%", "s_afterhrs": 45.7, "s_zscore": 80.5, "s_footprint": 3.3, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 66.6}, {"label": "1de4d3c65ffa", "score": 42.1, "tier": "Medium", "afterhrs": 366, "afterhrs_rt": "66.3%", "zscore": 3.43, "footprint": 15, "rapid": 0, "dwell": 13.3, "wkend_pct": "25%", "s_afterhrs": 66.3, "s_zscore": 40.6, "s_footprint": 7.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 86.4}, {"label": "e66b6de899fa", "score": 42.1, "tier": "Medium", "afterhrs": 3, "afterhrs_rt": "100.0%", "zscore": -0.36, "footprint": 3, "rapid": 0, "dwell": 1.1, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.4, "s_footprint": 1.1, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 7.0}, {"label": "edbd14dc6550", "score": 42.1, "tier": "Medium", "afterhrs": 3, "afterhrs_rt": "100.0%", "zscore": -0.28, "footprint": 3, "rapid": 0, "dwell": 0.4, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 7.1, "s_footprint": 1.1, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 2.5}, {"label": "7f1efc7070f3", "score": 42.0, "tier": "Medium", "afterhrs": 33, "afterhrs_rt": "91.7%", "zscore": -0.11, "footprint": 2, "rapid": 0, "dwell": 9.6, "wkend_pct": "58%", "s_afterhrs": 91.7, "s_zscore": 8.6, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 62.2}, {"label": "0b4bab82d186", "score": 42.0, "tier": "Medium", "afterhrs": 20, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 3, "rapid": 0, "dwell": 1.0, "wkend_pct": "40%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 1.1, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 6.4}, {"label": "cb50254d0516", "score": 42.0, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.18, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 8.0, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "bee78b9b7ac8", "score": 42.0, "tier": "Medium", "afterhrs": 616, "afterhrs_rt": "55.7%", "zscore": 4.06, "footprint": 34, "rapid": 6, "dwell": 12.8, "wkend_pct": "29%", "s_afterhrs": 55.7, "s_zscore": 46.3, "s_footprint": 18.0, "s_rapid": 12.0, "s_weekend": 0.0, "s_dwell": 83.4}, {"label": "048fe80be5be", "score": 41.9, "tier": "Medium", "afterhrs": 368, "afterhrs_rt": "69.8%", "zscore": 2.59, "footprint": 20, "rapid": 0, "dwell": 12.8, "wkend_pct": "31%", "s_afterhrs": 69.8, "s_zscore": 33.0, "s_footprint": 10.4, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 83.1}, {"label": "969ad8036f2a", "score": 41.9, "tier": "Medium", "afterhrs": 490, "afterhrs_rt": "61.9%", "zscore": 3.87, "footprint": 18, "rapid": 0, "dwell": 14.2, "wkend_pct": "28%", "s_afterhrs": 61.9, "s_zscore": 44.6, "s_footprint": 9.3, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 92.2}, {"label": "7b7986104b4a", "score": 41.9, "tier": "Medium", "afterhrs": 4, "afterhrs_rt": "100.0%", "zscore": -0.25, "footprint": 1, "rapid": 0, "dwell": 0.1, "wkend_pct": "25%", "s_afterhrs": 100.0, "s_zscore": 7.4, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.8}, {"label": "8614457d4e92", "score": 41.9, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.33, "footprint": 1, "rapid": 0, "dwell": 0.7, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.6, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 4.3}, {"label": "21b5d2d6660f", "score": 41.8, "tier": "Medium", "afterhrs": 3, "afterhrs_rt": "100.0%", "zscore": -0.33, "footprint": 2, "rapid": 0, "dwell": 0.2, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.7, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 1.5}, {"label": "e33999bbd7b0", "score": 41.8, "tier": "Medium", "afterhrs": 78, "afterhrs_rt": "76.5%", "zscore": 3.1, "footprint": 4, "rapid": 0, "dwell": 4.7, "wkend_pct": "12%", "s_afterhrs": 76.5, "s_zscore": 37.7, "s_footprint": 1.6, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 30.7}, {"label": "8f8b738d9720", "score": 41.7, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.3, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.9, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "7b79faee8a2f", "score": 41.7, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.48, "footprint": 1, "rapid": 0, "dwell": 1.1, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 5.3, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 7.5}, {"label": "fa41159a7d4c", "score": 41.7, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 2, "rapid": 0, "dwell": 0.2, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 1.6}, {"label": "bf9b443df1f1", "score": 41.7, "tier": "Medium", "afterhrs": 420, "afterhrs_rt": "64.0%", "zscore": 3.35, "footprint": 17, "rapid": 0, "dwell": 14.7, "wkend_pct": "32%", "s_afterhrs": 64.0, "s_zscore": 39.9, "s_footprint": 8.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 95.6}, {"label": "0ef3690c0356", "score": 41.7, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.33, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.7, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "1656dec34e33", "score": 41.7, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.33, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.7, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "dfe8322297a5", "score": 41.7, "tier": "Medium", "afterhrs": 4, "afterhrs_rt": "100.0%", "zscore": -0.44, "footprint": 4, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 5.7, "s_footprint": 1.6, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "4c94d8090f35", "score": 41.6, "tier": "Medium", "afterhrs": 3, "afterhrs_rt": "100.0%", "zscore": -0.47, "footprint": 2, "rapid": 0, "dwell": 0.7, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 5.4, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 4.4}, {"label": "e0f45203b6ac", "score": 41.6, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.35, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "d1ab1b2e3ff9", "score": 41.6, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.35, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "72e33ab00b43", "score": 41.6, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.35, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "5260944e2e37", "score": 41.6, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.35, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "b86794d476f5", "score": 41.6, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.35, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "772e3eef719e", "score": 41.6, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.35, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "493312efc118", "score": 41.6, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.35, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "932b0c31132b", "score": 41.6, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.35, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "2e20150fd19e", "score": 41.6, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.35, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.5, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "1949bf731128", "score": 41.6, "tier": "Medium", "afterhrs": 5, "afterhrs_rt": "100.0%", "zscore": -0.55, "footprint": 2, "rapid": 0, "dwell": 1.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 4.7, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 6.6}, {"label": "c74b351d0015", "score": 41.5, "tier": "Medium", "afterhrs": 14, "afterhrs_rt": "87.5%", "zscore": -0.49, "footprint": 2, "rapid": 0, "dwell": 0.5, "wkend_pct": "81%", "s_afterhrs": 87.5, "s_zscore": 5.2, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 3.2}, {"label": "1b682cad38f6", "score": 41.5, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.43, "footprint": 2, "rapid": 0, "dwell": 0.1, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 5.7, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.3}, {"label": "c5661fa3194e", "score": 41.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "57acf580d6a2", "score": 41.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "e5e4f842d6f4", "score": 41.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "75d45b46e14a", "score": 41.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "9995893a06ad", "score": 41.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "06043e4d2736", "score": 41.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.39, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.1, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "7202ef4fd7b7", "score": 41.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.4, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.0, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "60c9528c0fc1", "score": 41.5, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.4, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 6.0, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "5b5165ddf8fd", "score": 41.5, "tier": "Medium", "afterhrs": 198, "afterhrs_rt": "72.5%", "zscore": 2.81, "footprint": 9, "rapid": 2, "dwell": 8.2, "wkend_pct": "57%", "s_afterhrs": 72.5, "s_zscore": 35.0, "s_footprint": 4.4, "s_rapid": 4.0, "s_weekend": 0.0, "s_dwell": 53.0}, {"label": "58aff5112faa", "score": 41.5, "tier": "Medium", "afterhrs": 152, "afterhrs_rt": "21.3%", "zscore": 10.97, "footprint": 49, "rapid": 5, "dwell": 9.3, "wkend_pct": "1%", "s_afterhrs": 21.3, "s_zscore": 100.0, "s_footprint": 26.2, "s_rapid": 10.0, "s_weekend": 0.0, "s_dwell": 60.5}, {"label": "36aacd0a74e5", "score": 41.5, "tier": "Medium", "afterhrs": 6, "afterhrs_rt": "85.7%", "zscore": -0.24, "footprint": 3, "rapid": 0, "dwell": 0.4, "wkend_pct": "86%", "s_afterhrs": 85.7, "s_zscore": 7.5, "s_footprint": 1.1, "s_rapid": 0.0, "s_weekend": 100.0, "s_dwell": 2.7}, {"label": "96ca0a38fd93", "score": 41.4, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.42, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 5.8, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "973d9b01a28c", "score": 41.4, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.42, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 5.8, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "205fefa22020", "score": 41.4, "tier": "Medium", "afterhrs": 385, "afterhrs_rt": "62.7%", "zscore": 3.31, "footprint": 30, "rapid": 0, "dwell": 12.6, "wkend_pct": "28%", "s_afterhrs": 62.7, "s_zscore": 39.5, "s_footprint": 15.8, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 81.7}, {"label": "f9e8aa955387", "score": 41.4, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.54, "footprint": 2, "rapid": 0, "dwell": 0.4, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 4.8, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 2.7}, {"label": "852b89e087ff", "score": 41.3, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.51, "footprint": 2, "rapid": 0, "dwell": 0.1, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 5.0, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.3}, {"label": "a516b3717799", "score": 41.3, "tier": "Medium", "afterhrs": 557, "afterhrs_rt": "37.3%", "zscore": 7.25, "footprint": 37, "rapid": 2, "dwell": 13.2, "wkend_pct": "0%", "s_afterhrs": 37.3, "s_zscore": 75.1, "s_footprint": 19.7, "s_rapid": 4.0, "s_weekend": 0.0, "s_dwell": 85.7}, {"label": "d99aa755054c", "score": 41.3, "tier": "Medium", "afterhrs": 67, "afterhrs_rt": "5.8%", "zscore": 10.53, "footprint": 31, "rapid": 45, "dwell": 7.9, "wkend_pct": "2%", "s_afterhrs": 5.8, "s_zscore": 100.0, "s_footprint": 16.4, "s_rapid": 90.0, "s_weekend": 0.0, "s_dwell": 51.1}, {"label": "cec4a1d851f2", "score": 41.3, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.49, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 5.2, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "b92ae1901d8e", "score": 41.3, "tier": "Medium", "afterhrs": 3, "afterhrs_rt": "100.0%", "zscore": -0.51, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "67%", "s_afterhrs": 100.0, "s_zscore": 5.0, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "cf60a8b2dd89", "score": 41.2, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.52, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 4.9, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "0159c9808c4c", "score": 41.2, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.54, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 4.8, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "6389d914e752", "score": 41.2, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.55, "footprint": 1, "rapid": 0, "dwell": 0.1, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 4.6, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.8}, {"label": "151cbf85d808", "score": 41.2, "tier": "Medium", "afterhrs": 3, "afterhrs_rt": "100.0%", "zscore": -0.54, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 4.7, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.1}, {"label": "826e9b4e0b54", "score": 41.2, "tier": "Medium", "afterhrs": 383, "afterhrs_rt": "69.8%", "zscore": 1.3, "footprint": 30, "rapid": 5, "dwell": 14.1, "wkend_pct": "30%", "s_afterhrs": 69.8, "s_zscore": 21.3, "s_footprint": 15.8, "s_rapid": 10.0, "s_weekend": 0.0, "s_dwell": 91.3}, {"label": "9eea442e3198", "score": 41.2, "tier": "Medium", "afterhrs": 2, "afterhrs_rt": "100.0%", "zscore": -0.56, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 4.6, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "bcd49e9dfec2", "score": 41.1, "tier": "Medium", "afterhrs": 249, "afterhrs_rt": "61.6%", "zscore": 4.17, "footprint": 12, "rapid": 0, "dwell": 11.5, "wkend_pct": "36%", "s_afterhrs": 61.6, "s_zscore": 47.3, "s_footprint": 6.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 74.7}, {"label": "6b4f83e44fbc", "score": 41.1, "tier": "Medium", "afterhrs": 184, "afterhrs_rt": "41.8%", "zscore": 7.64, "footprint": 15, "rapid": 0, "dwell": 11.0, "wkend_pct": "3%", "s_afterhrs": 41.8, "s_zscore": 78.7, "s_footprint": 7.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 71.4}, {"label": "0ea1f1664273", "score": 41.1, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.57, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 4.4, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "31782e30d3bc", "score": 41.1, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.57, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 4.4, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "4446ced31921", "score": 41.1, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.57, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 4.4, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}, {"label": "098701ab22fd", "score": 41.1, "tier": "Medium", "afterhrs": 306, "afterhrs_rt": "61.9%", "zscore": 3.41, "footprint": 26, "rapid": 0, "dwell": 12.9, "wkend_pct": "24%", "s_afterhrs": 61.9, "s_zscore": 40.4, "s_footprint": 13.7, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 83.5}, {"label": "30643cddb0cd", "score": 41.1, "tier": "Medium", "afterhrs": 138, "afterhrs_rt": "26.3%", "zscore": 9.78, "footprint": 45, "rapid": 0, "dwell": 7.6, "wkend_pct": "0%", "s_afterhrs": 26.3, "s_zscore": 98.0, "s_footprint": 24.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 49.6}, {"label": "b2c20697a005", "score": 41.1, "tier": "Medium", "afterhrs": 17, "afterhrs_rt": "89.5%", "zscore": 0.92, "footprint": 2, "rapid": 0, "dwell": 2.2, "wkend_pct": "5%", "s_afterhrs": 89.5, "s_zscore": 17.9, "s_footprint": 0.5, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 14.3}, {"label": "d36e568d7c77", "score": 41.0, "tier": "Medium", "afterhrs": 1, "afterhrs_rt": "100.0%", "zscore": -0.61, "footprint": 1, "rapid": 0, "dwell": 0.0, "wkend_pct": "0%", "s_afterhrs": 100.0, "s_zscore": 4.1, "s_footprint": 0.0, "s_rapid": 0.0, "s_weekend": 0.0, "s_dwell": 0.0}];
+const DIG  = [{"label": "User 1404", "job": "Job 01", "score": 36.2, "tier": "Critical", "total": 213, "priv": 2, "unassoc": 0, "zscore": 12.77, "inactive": false, "s_zscore": 100.0, "s_priv": 4.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 2923", "job": "Job 01", "score": 35.6, "tier": "Critical", "total": 192, "priv": 1, "unassoc": 0, "zscore": 11.43, "inactive": false, "s_zscore": 100.0, "s_priv": 2.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 8370", "job": "Job 01", "score": 35.0, "tier": "Critical", "total": 182, "priv": 0, "unassoc": 0, "zscore": 10.79, "inactive": false, "s_zscore": 100.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 2854", "job": "Job 01", "score": 35.0, "tier": "Critical", "total": 180, "priv": 0, "unassoc": 0, "zscore": 10.66, "inactive": false, "s_zscore": 100.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 6086", "job": "Job 01", "score": 35.0, "tier": "Critical", "total": 184, "priv": 0, "unassoc": 0, "zscore": 10.92, "inactive": false, "s_zscore": 100.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 6656", "job": "Job 01", "score": 35.0, "tier": "Critical", "total": 188, "priv": 0, "unassoc": 0, "zscore": 11.17, "inactive": false, "s_zscore": 100.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 6976", "job": "Job 323", "score": 35.0, "tier": "Critical", "total": 1273, "priv": 20, "unassoc": 45, "zscore": 0.85, "inactive": false, "s_zscore": 8.5, "s_priv": 40.0, "s_unassoc": 100.0, "s_inactive": 0.0}, {"label": "User 1648", "job": "Job 247", "score": 34.6, "tier": "Critical", "total": 1102, "priv": 50, "unassoc": 0, "zscore": 1.32, "inactive": false, "s_zscore": 13.2, "s_priv": 100.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 2481", "job": "Job 139", "score": 30.0, "tier": "Critical", "total": 1411, "priv": 37, "unassoc": 0, "zscore": 2.24, "inactive": false, "s_zscore": 22.4, "s_priv": 74.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 3117", "job": "Job 177", "score": 29.4, "tier": "Critical", "total": 1063, "priv": 42, "unassoc": 0, "zscore": 1.19, "inactive": false, "s_zscore": 11.9, "s_priv": 84.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 1421", "job": "Job 30", "score": 28.8, "tier": "Critical", "total": 1656, "priv": 12, "unassoc": 0, "zscore": 6.18, "inactive": false, "s_zscore": 61.8, "s_priv": 24.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 4485", "job": "Job 155", "score": 28.6, "tier": "Critical", "total": 1961, "priv": 35, "unassoc": 0, "zscore": 2.16, "inactive": false, "s_zscore": 21.6, "s_priv": 70.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 0835", "job": "Job 92", "score": 27.6, "tier": "Critical", "total": 350, "priv": 0, "unassoc": 0, "zscore": 3.59, "inactive": true, "s_zscore": 35.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 0713", "job": "Job 21", "score": 27.4, "tier": "Critical", "total": 4, "priv": 0, "unassoc": 0, "zscore": 3.55, "inactive": true, "s_zscore": 35.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6995", "job": "Job 21", "score": 27.4, "tier": "Critical", "total": 4, "priv": 0, "unassoc": 0, "zscore": 3.55, "inactive": true, "s_zscore": 35.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5536", "job": "Job 21", "score": 27.4, "tier": "Critical", "total": 4, "priv": 0, "unassoc": 0, "zscore": 3.55, "inactive": true, "s_zscore": 35.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5236", "job": "Job 21", "score": 27.4, "tier": "Critical", "total": 4, "priv": 0, "unassoc": 0, "zscore": 3.55, "inactive": true, "s_zscore": 35.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4783", "job": "Job 139", "score": 27.3, "tier": "Critical", "total": 1007, "priv": 37, "unassoc": 0, "zscore": 1.44, "inactive": false, "s_zscore": 14.4, "s_priv": 74.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 1444", "job": "Job 108", "score": 27.2, "tier": "Critical", "total": 2, "priv": 0, "unassoc": 0, "zscore": 3.47, "inactive": true, "s_zscore": 34.7, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 1484", "job": "Job 247", "score": 27.1, "tier": "Critical", "total": 1028, "priv": 41, "unassoc": 0, "zscore": 0.7, "inactive": false, "s_zscore": 7.0, "s_priv": 82.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 6896", "job": "Job 98", "score": 26.6, "tier": "Critical", "total": 41, "priv": 0, "unassoc": 0, "zscore": 3.31, "inactive": true, "s_zscore": 33.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8497", "job": "Job 79", "score": 26.5, "tier": "Critical", "total": 254, "priv": 0, "unassoc": 0, "zscore": 3.28, "inactive": true, "s_zscore": 32.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2498", "job": "Job 256", "score": 26.3, "tier": "Critical", "total": 1058, "priv": 35, "unassoc": 0, "zscore": 1.52, "inactive": false, "s_zscore": 15.2, "s_priv": 70.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 6292", "job": "Job 122", "score": 26.0, "tier": "Critical", "total": 275, "priv": 0, "unassoc": 0, "zscore": 3.14, "inactive": true, "s_zscore": 31.4, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5571", "job": "Job 121", "score": 26.0, "tier": "Critical", "total": 11, "priv": 0, "unassoc": 0, "zscore": 3.14, "inactive": true, "s_zscore": 31.4, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4711", "job": "Job 177", "score": 25.2, "tier": "Critical", "total": 851, "priv": 38, "unassoc": 0, "zscore": 0.7, "inactive": false, "s_zscore": 7.0, "s_priv": 76.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 3090", "job": "Job 371", "score": 25.2, "tier": "Critical", "total": 1028, "priv": 39, "unassoc": 0, "zscore": 0.52, "inactive": false, "s_zscore": 5.2, "s_priv": 78.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 1187", "job": "Job 407", "score": 24.7, "tier": "Critical", "total": 1246, "priv": 37, "unassoc": 0, "zscore": 0.71, "inactive": false, "s_zscore": 7.1, "s_priv": 74.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 1360", "job": "Job 01", "score": 24.1, "tier": "Critical", "total": 121, "priv": 0, "unassoc": 0, "zscore": 6.9, "inactive": false, "s_zscore": 69.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 5524", "job": "Job 49", "score": 24.0, "tier": "Critical", "total": 271, "priv": 8, "unassoc": 0, "zscore": 5.47, "inactive": false, "s_zscore": 54.7, "s_priv": 16.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 4213", "job": "Job 94", "score": 23.9, "tier": "Critical", "total": 213, "priv": 0, "unassoc": 0, "zscore": 2.53, "inactive": true, "s_zscore": 25.3, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 1705", "job": "Job 344", "score": 23.6, "tier": "Critical", "total": 909, "priv": 36, "unassoc": 0, "zscore": 0.56, "inactive": false, "s_zscore": 5.6, "s_priv": 72.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9934", "job": "Job 186", "score": 23.5, "tier": "Critical", "total": 1635, "priv": 33, "unassoc": 0, "zscore": 1.06, "inactive": false, "s_zscore": 10.6, "s_priv": 66.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 3768", "job": "Job 167", "score": 23.5, "tier": "Critical", "total": 4, "priv": 0, "unassoc": 0, "zscore": 2.42, "inactive": true, "s_zscore": 24.2, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2556", "job": "Job 682", "score": 23.4, "tier": "Critical", "total": 1124, "priv": 39, "unassoc": 0, "zscore": 0.0, "inactive": false, "s_zscore": 0.0, "s_priv": 78.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 8452", "job": "Job 51", "score": 23.2, "tier": "Critical", "total": 250, "priv": 0, "unassoc": 0, "zscore": 2.35, "inactive": true, "s_zscore": 23.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4661", "job": "Job 186", "score": 23.0, "tier": "Critical", "total": 1651, "priv": 32, "unassoc": 0, "zscore": 1.09, "inactive": false, "s_zscore": 10.9, "s_priv": 64.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 0530", "job": "Job 12", "score": 22.8, "tier": "Critical", "total": 1006, "priv": 2, "unassoc": 0, "zscore": 6.16, "inactive": false, "s_zscore": 61.6, "s_priv": 4.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 8001", "job": "Job 93", "score": 22.2, "tier": "Critical", "total": 105, "priv": 0, "unassoc": 0, "zscore": 2.05, "inactive": true, "s_zscore": 20.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 3040", "job": "Job 247", "score": 21.6, "tier": "Critical", "total": 813, "priv": 36, "unassoc": 0, "zscore": -1.09, "inactive": false, "s_zscore": 0.0, "s_priv": 72.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 1599", "job": "Job 247", "score": 21.6, "tier": "Critical", "total": 859, "priv": 36, "unassoc": 0, "zscore": -0.71, "inactive": false, "s_zscore": 0.0, "s_priv": 72.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 1809", "job": "Job 77", "score": 21.5, "tier": "Critical", "total": 909, "priv": 12, "unassoc": 0, "zscore": 4.09, "inactive": false, "s_zscore": 40.9, "s_priv": 24.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 6725", "job": "Job 14", "score": 21.4, "tier": "Critical", "total": 240, "priv": 0, "unassoc": 0, "zscore": 6.1, "inactive": false, "s_zscore": 61.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 6204", "job": "Job 14", "score": 21.4, "tier": "Critical", "total": 240, "priv": 0, "unassoc": 0, "zscore": 6.1, "inactive": false, "s_zscore": 61.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 7110", "job": "Job 257", "score": 21.3, "tier": "Critical", "total": 65, "priv": 0, "unassoc": 0, "zscore": 1.79, "inactive": true, "s_zscore": 17.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6185", "job": "Job 265", "score": 21.3, "tier": "Critical", "total": 2, "priv": 0, "unassoc": 0, "zscore": 1.79, "inactive": true, "s_zscore": 17.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2186", "job": "Job 01", "score": 21.2, "tier": "Critical", "total": 108, "priv": 0, "unassoc": 0, "zscore": 6.07, "inactive": false, "s_zscore": 60.7, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 8748", "job": "Job 01", "score": 21.2, "tier": "Critical", "total": 108, "priv": 0, "unassoc": 0, "zscore": 6.07, "inactive": false, "s_zscore": 60.7, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 2891", "job": "Job 01", "score": 21.2, "tier": "Critical", "total": 108, "priv": 0, "unassoc": 0, "zscore": 6.07, "inactive": false, "s_zscore": 60.7, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9666", "job": "Job 231", "score": 21.2, "tier": "Critical", "total": 20, "priv": 0, "unassoc": 0, "zscore": 1.77, "inactive": true, "s_zscore": 17.7, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 3682", "job": "Job 93", "score": 21.2, "tier": "Critical", "total": 94, "priv": 0, "unassoc": 0, "zscore": 1.76, "inactive": true, "s_zscore": 17.6, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 9696", "job": "Job 01", "score": 21.0, "tier": "Critical", "total": 107, "priv": 0, "unassoc": 0, "zscore": 6.01, "inactive": false, "s_zscore": 60.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 8428", "job": "Job 21", "score": 21.0, "tier": "Critical", "total": 3, "priv": 0, "unassoc": 0, "zscore": 1.71, "inactive": true, "s_zscore": 17.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8900", "job": "Job 24", "score": 20.9, "tier": "Critical", "total": 346, "priv": 0, "unassoc": 0, "zscore": 1.68, "inactive": true, "s_zscore": 16.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 1554", "job": "Job 64", "score": 20.8, "tier": "Critical", "total": 1072, "priv": 23, "unassoc": 0, "zscore": 2.01, "inactive": false, "s_zscore": 20.1, "s_priv": 46.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 2069", "job": "Job 24", "score": 20.8, "tier": "Critical", "total": 343, "priv": 0, "unassoc": 0, "zscore": 1.66, "inactive": true, "s_zscore": 16.6, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7732", "job": "Job 24", "score": 20.8, "tier": "Critical", "total": 342, "priv": 0, "unassoc": 0, "zscore": 1.65, "inactive": true, "s_zscore": 16.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7627", "job": "Job 24", "score": 20.8, "tier": "Critical", "total": 342, "priv": 0, "unassoc": 0, "zscore": 1.65, "inactive": true, "s_zscore": 16.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5650", "job": "Job 24", "score": 20.8, "tier": "Critical", "total": 341, "priv": 0, "unassoc": 0, "zscore": 1.65, "inactive": true, "s_zscore": 16.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8631", "job": "Job 24", "score": 20.8, "tier": "Critical", "total": 341, "priv": 0, "unassoc": 0, "zscore": 1.65, "inactive": true, "s_zscore": 16.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8766", "job": "Job 24", "score": 20.8, "tier": "Critical", "total": 341, "priv": 0, "unassoc": 0, "zscore": 1.65, "inactive": true, "s_zscore": 16.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2875", "job": "Job 24", "score": 20.8, "tier": "Critical", "total": 341, "priv": 0, "unassoc": 0, "zscore": 1.65, "inactive": true, "s_zscore": 16.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2876", "job": "Job 24", "score": 20.8, "tier": "Critical", "total": 341, "priv": 0, "unassoc": 0, "zscore": 1.65, "inactive": true, "s_zscore": 16.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7954", "job": "Job 24", "score": 20.8, "tier": "Critical", "total": 341, "priv": 0, "unassoc": 0, "zscore": 1.65, "inactive": true, "s_zscore": 16.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 3590", "job": "Job 26", "score": 20.7, "tier": "Critical", "total": 1477, "priv": 11, "unassoc": 0, "zscore": 4.02, "inactive": false, "s_zscore": 40.2, "s_priv": 22.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 8253", "job": "Job 36", "score": 20.7, "tier": "Critical", "total": 1335, "priv": 0, "unassoc": 0, "zscore": 5.9, "inactive": false, "s_zscore": 59.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 5155", "job": "Job 306", "score": 20.5, "tier": "Critical", "total": 28, "priv": 1, "unassoc": 0, "zscore": 1.39, "inactive": true, "s_zscore": 13.9, "s_priv": 2.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6410", "job": "Job 28", "score": 20.4, "tier": "Critical", "total": 622, "priv": 17, "unassoc": 0, "zscore": 2.91, "inactive": false, "s_zscore": 29.1, "s_priv": 34.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 1013", "job": "Job 01", "score": 20.3, "tier": "Critical", "total": 104, "priv": 0, "unassoc": 0, "zscore": 5.81, "inactive": false, "s_zscore": 58.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 6568", "job": "Job 01", "score": 20.3, "tier": "Critical", "total": 104, "priv": 0, "unassoc": 0, "zscore": 5.81, "inactive": false, "s_zscore": 58.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 0772", "job": "Job 28", "score": 20.3, "tier": "Critical", "total": 618, "priv": 17, "unassoc": 0, "zscore": 2.89, "inactive": false, "s_zscore": 28.9, "s_priv": 34.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 3862", "job": "Job 79", "score": 19.9, "tier": "Critical", "total": 129, "priv": 0, "unassoc": 0, "zscore": 1.41, "inactive": true, "s_zscore": 14.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6467", "job": "Job 93", "score": 19.8, "tier": "Critical", "total": 79, "priv": 0, "unassoc": 0, "zscore": 1.38, "inactive": true, "s_zscore": 13.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7571", "job": "Job 93", "score": 19.8, "tier": "Critical", "total": 79, "priv": 0, "unassoc": 0, "zscore": 1.38, "inactive": true, "s_zscore": 13.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2527", "job": "Job 411", "score": 19.8, "tier": "Critical", "total": 2830, "priv": 33, "unassoc": 0, "zscore": -0.71, "inactive": false, "s_zscore": 0.0, "s_priv": 66.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9106", "job": "Job 120", "score": 19.7, "tier": "Critical", "total": 1408, "priv": 18, "unassoc": 0, "zscore": 2.54, "inactive": false, "s_zscore": 25.4, "s_priv": 36.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 5018", "job": "Job 233", "score": 19.5, "tier": "Critical", "total": 2, "priv": 0, "unassoc": 0, "zscore": 1.29, "inactive": true, "s_zscore": 12.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7118", "job": "Job 233", "score": 19.5, "tier": "Critical", "total": 2, "priv": 0, "unassoc": 0, "zscore": 1.29, "inactive": true, "s_zscore": 12.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8190", "job": "Job 234", "score": 19.5, "tier": "Critical", "total": 2, "priv": 0, "unassoc": 0, "zscore": 1.29, "inactive": true, "s_zscore": 12.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 9825", "job": "Job 234", "score": 19.5, "tier": "Critical", "total": 2, "priv": 0, "unassoc": 0, "zscore": 1.29, "inactive": true, "s_zscore": 12.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 1644", "job": "Job 343", "score": 19.4, "tier": "Critical", "total": 1001, "priv": 28, "unassoc": 0, "zscore": 0.74, "inactive": false, "s_zscore": 7.4, "s_priv": 56.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 3812", "job": "Job 377", "score": 19.0, "tier": "Critical", "total": 43, "priv": 0, "unassoc": 0, "zscore": 1.15, "inactive": true, "s_zscore": 11.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5645", "job": "Job 315", "score": 19.0, "tier": "Critical", "total": 2, "priv": 0, "unassoc": 0, "zscore": 1.15, "inactive": true, "s_zscore": 11.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 0416", "job": "Job 317", "score": 19.0, "tier": "Critical", "total": 4, "priv": 0, "unassoc": 0, "zscore": 1.15, "inactive": true, "s_zscore": 11.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4001", "job": "Job 379", "score": 19.0, "tier": "Critical", "total": 196, "priv": 0, "unassoc": 0, "zscore": 1.15, "inactive": true, "s_zscore": 11.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4650", "job": "Job 383", "score": 19.0, "tier": "Critical", "total": 7, "priv": 0, "unassoc": 0, "zscore": 1.14, "inactive": true, "s_zscore": 11.4, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 1260", "job": "Job 138", "score": 19.0, "tier": "Critical", "total": 514, "priv": 19, "unassoc": 0, "zscore": 2.16, "inactive": false, "s_zscore": 21.6, "s_priv": 38.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 7499", "job": "Job 367", "score": 18.9, "tier": "Critical", "total": 27, "priv": 0, "unassoc": 0, "zscore": 1.13, "inactive": true, "s_zscore": 11.3, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8375", "job": "Job 319", "score": 18.9, "tier": "Critical", "total": 45, "priv": 0, "unassoc": 0, "zscore": 1.12, "inactive": true, "s_zscore": 11.2, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7007", "job": "Job 129", "score": 18.9, "tier": "Critical", "total": 117, "priv": 0, "unassoc": 0, "zscore": 1.12, "inactive": true, "s_zscore": 11.2, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6164", "job": "Job 12", "score": 18.9, "tier": "Critical", "total": 892, "priv": 0, "unassoc": 0, "zscore": 5.4, "inactive": false, "s_zscore": 54.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9713", "job": "Job 05", "score": 18.9, "tier": "Critical", "total": 416, "priv": 0, "unassoc": 0, "zscore": 1.11, "inactive": true, "s_zscore": 11.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 9133", "job": "Job 388", "score": 18.9, "tier": "Critical", "total": 205, "priv": 0, "unassoc": 0, "zscore": 1.1, "inactive": true, "s_zscore": 11.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6687", "job": "Job 12", "score": 18.9, "tier": "Critical", "total": 247, "priv": 0, "unassoc": 0, "zscore": 1.1, "inactive": true, "s_zscore": 11.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2351", "job": "Job 40", "score": 18.8, "tier": "Critical", "total": 1131, "priv": 21, "unassoc": 0, "zscore": 1.78, "inactive": false, "s_zscore": 17.8, "s_priv": 42.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 6132", "job": "Job 387", "score": 18.8, "tier": "Critical", "total": 7, "priv": 0, "unassoc": 0, "zscore": 1.09, "inactive": true, "s_zscore": 10.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5366", "job": "Job 94", "score": 18.8, "tier": "Critical", "total": 126, "priv": 0, "unassoc": 0, "zscore": 1.09, "inactive": true, "s_zscore": 10.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 9578", "job": "Job 05", "score": 18.8, "tier": "Critical", "total": 409, "priv": 0, "unassoc": 0, "zscore": 1.09, "inactive": true, "s_zscore": 10.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2100", "job": "Job 50", "score": 18.8, "tier": "Critical", "total": 492, "priv": 0, "unassoc": 0, "zscore": 5.37, "inactive": false, "s_zscore": 53.7, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 6178", "job": "Job 05", "score": 18.8, "tier": "Critical", "total": 1477, "priv": 2, "unassoc": 0, "zscore": 5.02, "inactive": false, "s_zscore": 50.2, "s_priv": 4.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 2334", "job": "Job 51", "score": 18.7, "tier": "Critical", "total": 141, "priv": 0, "unassoc": 0, "zscore": 1.06, "inactive": true, "s_zscore": 10.6, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4434", "job": "Job 94", "score": 18.7, "tier": "Critical", "total": 124, "priv": 0, "unassoc": 0, "zscore": 1.05, "inactive": true, "s_zscore": 10.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 1925", "job": "Job 451", "score": 18.7, "tier": "Critical", "total": 1222, "priv": 27, "unassoc": 0, "zscore": 0.71, "inactive": false, "s_zscore": 7.1, "s_priv": 54.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 0680", "job": "Job 36", "score": 18.7, "tier": "Critical", "total": 309, "priv": 0, "unassoc": 0, "zscore": 1.05, "inactive": true, "s_zscore": 10.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2313", "job": "Job 79", "score": 18.6, "tier": "Critical", "total": 104, "priv": 0, "unassoc": 0, "zscore": 1.04, "inactive": true, "s_zscore": 10.4, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 0415", "job": "Job 60", "score": 18.6, "tier": "Critical", "total": 419, "priv": 0, "unassoc": 0, "zscore": 1.02, "inactive": true, "s_zscore": 10.2, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6367", "job": "Job 94", "score": 18.6, "tier": "Critical", "total": 122, "priv": 0, "unassoc": 0, "zscore": 1.02, "inactive": true, "s_zscore": 10.2, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 9072", "job": "Job 90", "score": 18.5, "tier": "Critical", "total": 139, "priv": 0, "unassoc": 0, "zscore": 1.01, "inactive": true, "s_zscore": 10.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4613", "job": "Job 155", "score": 18.5, "tier": "Critical", "total": 1096, "priv": 27, "unassoc": 0, "zscore": 0.66, "inactive": false, "s_zscore": 6.6, "s_priv": 54.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9259", "job": "Job 07", "score": 18.5, "tier": "Critical", "total": 1616, "priv": 5, "unassoc": 0, "zscore": 4.43, "inactive": false, "s_zscore": 44.3, "s_priv": 10.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9015", "job": "Job 05", "score": 18.4, "tier": "Critical", "total": 334, "priv": 1, "unassoc": 0, "zscore": 0.81, "inactive": true, "s_zscore": 8.1, "s_priv": 2.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 0435", "job": "Job 186", "score": 18.4, "tier": "Critical", "total": 1574, "priv": 25, "unassoc": 0, "zscore": 0.97, "inactive": false, "s_zscore": 9.7, "s_priv": 50.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9500", "job": "Job 378", "score": 18.4, "tier": "Critical", "total": 93, "priv": 0, "unassoc": 0, "zscore": 0.97, "inactive": true, "s_zscore": 9.7, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4042", "job": "Job 374", "score": 18.1, "tier": "Critical", "total": 95, "priv": 0, "unassoc": 0, "zscore": 0.88, "inactive": true, "s_zscore": 8.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 9506", "job": "Job 36", "score": 18.0, "tier": "Critical", "total": 267, "priv": 0, "unassoc": 0, "zscore": 0.85, "inactive": true, "s_zscore": 8.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2941", "job": "Job 90", "score": 17.9, "tier": "Critical", "total": 123, "priv": 0, "unassoc": 0, "zscore": 0.82, "inactive": true, "s_zscore": 8.2, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 9446", "job": "Job 23", "score": 17.9, "tier": "Critical", "total": 371, "priv": 0, "unassoc": 0, "zscore": 0.82, "inactive": true, "s_zscore": 8.2, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5973", "job": "Job 45", "score": 17.8, "tier": "Critical", "total": 554, "priv": 0, "unassoc": 0, "zscore": 0.8, "inactive": true, "s_zscore": 8.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 9597", "job": "Job 29", "score": 17.8, "tier": "Critical", "total": 98, "priv": 0, "unassoc": 0, "zscore": 0.79, "inactive": true, "s_zscore": 7.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 3855", "job": "Job 504", "score": 17.5, "tier": "Critical", "total": 12, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 3708", "job": "Job 501", "score": 17.5, "tier": "Critical", "total": 7, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4564", "job": "Job 396", "score": 17.5, "tier": "Critical", "total": 54, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5079", "job": "Job 521", "score": 17.5, "tier": "Critical", "total": 2, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 3940", "job": "Job 472", "score": 17.5, "tier": "Critical", "total": 178, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 9670", "job": "Job 534", "score": 17.5, "tier": "Critical", "total": 3, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8019", "job": "Job 416", "score": 17.5, "tier": "Critical", "total": 71, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5908", "job": "Job 462", "score": 17.5, "tier": "Critical", "total": 64, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 1769", "job": "Job 444", "score": 17.5, "tier": "Critical", "total": 567, "priv": 25, "unassoc": 0, "zscore": 0.71, "inactive": false, "s_zscore": 7.1, "s_priv": 50.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 7006", "job": "Job 531", "score": 17.5, "tier": "Critical", "total": 56, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2606", "job": "Job 481", "score": 17.5, "tier": "Critical", "total": 933, "priv": 25, "unassoc": 0, "zscore": 0.71, "inactive": false, "s_zscore": 7.1, "s_priv": 50.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 0958", "job": "Job 401", "score": 17.5, "tier": "Critical", "total": 89, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4330", "job": "Job 402", "score": 17.5, "tier": "Critical", "total": 181, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4595", "job": "Job 459", "score": 17.5, "tier": "Critical", "total": 38, "priv": 0, "unassoc": 0, "zscore": 0.71, "inactive": true, "s_zscore": 7.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8006", "job": "Job 36", "score": 17.4, "tier": "Critical", "total": 236, "priv": 0, "unassoc": 0, "zscore": 0.7, "inactive": true, "s_zscore": 7.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7856", "job": "Job 54", "score": 17.4, "tier": "Critical", "total": 1602, "priv": 3, "unassoc": 0, "zscore": 4.47, "inactive": false, "s_zscore": 44.7, "s_priv": 6.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 4076", "job": "Job 15", "score": 17.4, "tier": "Critical", "total": 1746, "priv": 14, "unassoc": 0, "zscore": 2.56, "inactive": false, "s_zscore": 25.6, "s_priv": 28.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9354", "job": "Job 07", "score": 17.3, "tier": "Critical", "total": 1792, "priv": 0, "unassoc": 0, "zscore": 4.95, "inactive": false, "s_zscore": 49.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9134", "job": "Job 51", "score": 17.3, "tier": "Critical", "total": 107, "priv": 0, "unassoc": 0, "zscore": 0.66, "inactive": true, "s_zscore": 6.6, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4050", "job": "Job 26", "score": 17.2, "tier": "Critical", "total": 1263, "priv": 9, "unassoc": 0, "zscore": 3.38, "inactive": false, "s_zscore": 33.8, "s_priv": 18.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 8907", "job": "Job 12", "score": 17.2, "tier": "Critical", "total": 177, "priv": 0, "unassoc": 0, "zscore": 0.64, "inactive": true, "s_zscore": 6.4, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7641", "job": "Job 12", "score": 17.2, "tier": "Critical", "total": 819, "priv": 0, "unassoc": 0, "zscore": 4.91, "inactive": false, "s_zscore": 49.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 8593", "job": "Job 51", "score": 17.1, "tier": "Critical", "total": 103, "priv": 0, "unassoc": 0, "zscore": 0.61, "inactive": true, "s_zscore": 6.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6530", "job": "Job 08", "score": 17.1, "tier": "Critical", "total": 602, "priv": 0, "unassoc": 0, "zscore": 4.89, "inactive": false, "s_zscore": 48.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9147", "job": "Job 79", "score": 17.1, "tier": "Critical", "total": 75, "priv": 0, "unassoc": 0, "zscore": 0.6, "inactive": true, "s_zscore": 6.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2784", "job": "Job 24", "score": 17.1, "tier": "Critical", "total": 776, "priv": 1, "unassoc": 0, "zscore": 4.71, "inactive": false, "s_zscore": 47.1, "s_priv": 2.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 7145", "job": "Job 06", "score": 17.1, "tier": "Critical", "total": 315, "priv": 0, "unassoc": 0, "zscore": 0.59, "inactive": true, "s_zscore": 5.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7310", "job": "Job 79", "score": 17.1, "tier": "Critical", "total": 74, "priv": 0, "unassoc": 0, "zscore": 0.59, "inactive": true, "s_zscore": 5.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 3921", "job": "Job 214", "score": 17.0, "tier": "Critical", "total": 999, "priv": 17, "unassoc": 0, "zscore": 1.94, "inactive": false, "s_zscore": 19.4, "s_priv": 34.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 8175", "job": "Job 05", "score": 17.0, "tier": "Critical", "total": 266, "priv": 0, "unassoc": 0, "zscore": 0.56, "inactive": true, "s_zscore": 5.6, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6626", "job": "Job 50", "score": 16.9, "tier": "Critical", "total": 72, "priv": 0, "unassoc": 0, "zscore": 0.55, "inactive": true, "s_zscore": 5.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5880", "job": "Job 98", "score": 16.9, "tier": "Critical", "total": 12, "priv": 0, "unassoc": 0, "zscore": 0.55, "inactive": true, "s_zscore": 5.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6616", "job": "Job 05", "score": 16.9, "tier": "Critical", "total": 1427, "priv": 0, "unassoc": 0, "zscore": 4.84, "inactive": false, "s_zscore": 48.4, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 5160", "job": "Job 36", "score": 16.9, "tier": "Critical", "total": 203, "priv": 0, "unassoc": 0, "zscore": 0.54, "inactive": true, "s_zscore": 5.4, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 1584", "job": "Job 433", "score": 16.9, "tier": "Critical", "total": 1186, "priv": 24, "unassoc": 0, "zscore": 0.71, "inactive": false, "s_zscore": 7.1, "s_priv": 48.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 1169", "job": "Job 563", "score": 16.8, "tier": "Critical", "total": 1214, "priv": 28, "unassoc": 0, "zscore": 0.0, "inactive": false, "s_zscore": 0.0, "s_priv": 56.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 1366", "job": "Job 12", "score": 16.8, "tier": "Critical", "total": 158, "priv": 0, "unassoc": 0, "zscore": 0.51, "inactive": true, "s_zscore": 5.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4666", "job": "Job 88", "score": 16.7, "tier": "Critical", "total": 693, "priv": 10, "unassoc": 0, "zscore": 3.07, "inactive": false, "s_zscore": 30.7, "s_priv": 20.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9094", "job": "Job 05", "score": 16.7, "tier": "Critical", "total": 1409, "priv": 0, "unassoc": 0, "zscore": 4.77, "inactive": false, "s_zscore": 47.7, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 5497", "job": "Job 45", "score": 16.7, "tier": "Critical", "total": 413, "priv": 0, "unassoc": 0, "zscore": 0.48, "inactive": true, "s_zscore": 4.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8587", "job": "Job 45", "score": 16.7, "tier": "Critical", "total": 413, "priv": 0, "unassoc": 0, "zscore": 0.48, "inactive": true, "s_zscore": 4.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6460", "job": "Job 05", "score": 16.7, "tier": "Critical", "total": 244, "priv": 0, "unassoc": 0, "zscore": 0.48, "inactive": true, "s_zscore": 4.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4387", "job": "Job 26", "score": 16.7, "tier": "Critical", "total": 1324, "priv": 7, "unassoc": 0, "zscore": 3.56, "inactive": false, "s_zscore": 35.6, "s_priv": 14.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 7346", "job": "Job 05", "score": 16.6, "tier": "Critical", "total": 1404, "priv": 0, "unassoc": 0, "zscore": 4.75, "inactive": false, "s_zscore": 47.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 5668", "job": "Job 98", "score": 16.6, "tier": "Critical", "total": 11, "priv": 0, "unassoc": 0, "zscore": 0.46, "inactive": true, "s_zscore": 4.6, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 0557", "job": "Job 50", "score": 16.5, "tier": "Critical", "total": 62, "priv": 0, "unassoc": 0, "zscore": 0.44, "inactive": true, "s_zscore": 4.4, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5648", "job": "Job 28", "score": 16.5, "tier": "Critical", "total": 957, "priv": 0, "unassoc": 0, "zscore": 4.72, "inactive": false, "s_zscore": 47.2, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 3707", "job": "Job 08", "score": 16.5, "tier": "Critical", "total": 116, "priv": 0, "unassoc": 0, "zscore": 0.43, "inactive": true, "s_zscore": 4.3, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8289", "job": "Job 06", "score": 16.5, "tier": "Critical", "total": 1625, "priv": 0, "unassoc": 0, "zscore": 4.71, "inactive": false, "s_zscore": 47.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 6571", "job": "Job 12", "score": 16.4, "tier": "Critical", "total": 142, "priv": 0, "unassoc": 0, "zscore": 0.4, "inactive": true, "s_zscore": 4.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 0592", "job": "Job 16", "score": 16.3, "tier": "Critical", "total": 247, "priv": 0, "unassoc": 0, "zscore": 0.38, "inactive": true, "s_zscore": 3.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4279", "job": "Job 24", "score": 16.3, "tier": "Critical", "total": 161, "priv": 0, "unassoc": 0, "zscore": 0.38, "inactive": true, "s_zscore": 3.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 1470", "job": "Job 156", "score": 16.3, "tier": "Critical", "total": 1066, "priv": 20, "unassoc": 0, "zscore": 1.24, "inactive": false, "s_zscore": 12.4, "s_priv": 40.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 4175", "job": "Job 05", "score": 16.3, "tier": "Critical", "total": 217, "priv": 0, "unassoc": 0, "zscore": 0.38, "inactive": true, "s_zscore": 3.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 3127", "job": "Job 91", "score": 16.3, "tier": "Critical", "total": 1062, "priv": 21, "unassoc": 0, "zscore": 1.06, "inactive": false, "s_zscore": 10.6, "s_priv": 42.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 9587", "job": "Job 12", "score": 16.3, "tier": "Critical", "total": 136, "priv": 0, "unassoc": 0, "zscore": 0.36, "inactive": true, "s_zscore": 3.6, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 9034", "job": "Job 98", "score": 16.3, "tier": "Critical", "total": 10, "priv": 0, "unassoc": 0, "zscore": 0.36, "inactive": true, "s_zscore": 3.6, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4361", "job": "Job 24", "score": 16.3, "tier": "Critical", "total": 158, "priv": 0, "unassoc": 0, "zscore": 0.36, "inactive": true, "s_zscore": 3.6, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8659", "job": "Job 06", "score": 16.2, "tier": "Critical", "total": 241, "priv": 0, "unassoc": 0, "zscore": 0.36, "inactive": true, "s_zscore": 3.6, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 3945", "job": "Job 791", "score": 16.2, "tier": "Critical", "total": 223, "priv": 2, "unassoc": 0, "zscore": 0.0, "inactive": true, "s_zscore": 0.0, "s_priv": 4.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 0611", "job": "Job 545", "score": 16.2, "tier": "Critical", "total": 480, "priv": 2, "unassoc": 0, "zscore": 0.0, "inactive": true, "s_zscore": 0.0, "s_priv": 4.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4007", "job": "Job 506", "score": 16.2, "tier": "Critical", "total": 106, "priv": 2, "unassoc": 0, "zscore": -0.71, "inactive": true, "s_zscore": 0.0, "s_priv": 4.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 4941", "job": "Job 92", "score": 16.2, "tier": "Critical", "total": 65, "priv": 0, "unassoc": 0, "zscore": 0.34, "inactive": true, "s_zscore": 3.4, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 0678", "job": "Job 92", "score": 16.2, "tier": "Critical", "total": 65, "priv": 0, "unassoc": 0, "zscore": 0.34, "inactive": true, "s_zscore": 3.4, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 2678", "job": "Job 24", "score": 16.2, "tier": "Critical", "total": 155, "priv": 0, "unassoc": 0, "zscore": 0.34, "inactive": true, "s_zscore": 3.4, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 0931", "job": "Job 05", "score": 16.2, "tier": "Critical", "total": 205, "priv": 0, "unassoc": 0, "zscore": 0.33, "inactive": true, "s_zscore": 3.3, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7606", "job": "Job 07", "score": 16.2, "tier": "Critical", "total": 242, "priv": 0, "unassoc": 0, "zscore": 0.33, "inactive": true, "s_zscore": 3.3, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 6597", "job": "Job 129", "score": 16.2, "tier": "Critical", "total": 62, "priv": 0, "unassoc": 0, "zscore": 0.33, "inactive": true, "s_zscore": 3.3, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 0411", "job": "Job 07", "score": 16.1, "tier": "Critical", "total": 237, "priv": 0, "unassoc": 0, "zscore": 0.32, "inactive": true, "s_zscore": 3.2, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5735", "job": "Job 12", "score": 16.1, "tier": "Critical", "total": 128, "priv": 0, "unassoc": 0, "zscore": 0.31, "inactive": true, "s_zscore": 3.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 8451", "job": "Job 92", "score": 16.1, "tier": "Critical", "total": 62, "priv": 0, "unassoc": 0, "zscore": 0.31, "inactive": true, "s_zscore": 3.1, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7391", "job": "Job 12", "score": 16.1, "tier": "Critical", "total": 127, "priv": 0, "unassoc": 0, "zscore": 0.3, "inactive": true, "s_zscore": 3.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 3649", "job": "Job 75", "score": 16.0, "tier": "Critical", "total": 107, "priv": 0, "unassoc": 0, "zscore": 0.3, "inactive": true, "s_zscore": 3.0, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5798", "job": "Job 18", "score": 16.0, "tier": "Critical", "total": 208, "priv": 0, "unassoc": 0, "zscore": 4.58, "inactive": false, "s_zscore": 45.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 5773", "job": "Job 13", "score": 16.0, "tier": "Critical", "total": 290, "priv": 0, "unassoc": 0, "zscore": 0.29, "inactive": true, "s_zscore": 2.9, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 0055", "job": "Job 08", "score": 16.0, "tier": "Critical", "total": 100, "priv": 0, "unassoc": 0, "zscore": 0.28, "inactive": true, "s_zscore": 2.8, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 3251", "job": "Job 304", "score": 16.0, "tier": "Critical", "total": 1313, "priv": 19, "unassoc": 0, "zscore": 1.31, "inactive": false, "s_zscore": 13.1, "s_priv": 38.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 4143", "job": "Job 24", "score": 15.9, "tier": "Critical", "total": 145, "priv": 0, "unassoc": 0, "zscore": 0.27, "inactive": true, "s_zscore": 2.7, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 5661", "job": "Job 06", "score": 15.9, "tier": "Critical", "total": 209, "priv": 0, "unassoc": 0, "zscore": 0.25, "inactive": true, "s_zscore": 2.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}, {"label": "User 7781", "job": "Job 57", "score": 15.9, "tier": "Critical", "total": 440, "priv": 20, "unassoc": 0, "zscore": 1.11, "inactive": false, "s_zscore": 11.1, "s_priv": 40.0, "s_unassoc": 0.0, "s_inactive": 0.0}, {"label": "User 7397", "job": "Job 231", "score": 15.9, "tier": "Critical", "total": 9, "priv": 0, "unassoc": 0, "zscore": 0.25, "inactive": true, "s_zscore": 2.5, "s_priv": 0.0, "s_unassoc": 0.0, "s_inactive": 100.0}];
+
+const TIER_C = {Critical:'#c64545',High:'#cc785c',Medium:'#e8a55a',Low:'#a09d96'};
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showPage(id,tab){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  tab.classList.add('active');
+}
+
+// ── Score bar ─────────────────────────────────────────────────────────────────
+function scoreBar(score,tier){
+  const c=TIER_C[tier]||'#ccc';
+  return `<div class="score-wrap"><span class="score-num" style="color:${c}">${score}</span><div class="score-track"><div class="score-fill" style="width:${score}%;background:${c}"></div></div></div>`;
+}
+function tierBadge(t){return `<span class="tier-badge tier-${t}">${t}</span>`;}
+function inactiveBadge(v){return v?`<span class="inactive-badge">Inactive</span>`:'';}
+
+// ── Table state & render ──────────────────────────────────────────────────────
+const state={
+  phys:{filter:'All',search:'',sort:'score',dir:-1},
+  dig: {filter:'All',search:'',sort:'score',dir:-1},
+};
+function filterTable(w,tier,btn){
+  state[w].filter=tier;
+  btn.closest('.controls').querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); renderTable(w);
+}
+function searchTable(w,v){state[w].search=v.toLowerCase();renderTable(w);}
+function sortTable(w,col){
+  if(state[w].sort===col)state[w].dir*=-1;else{state[w].sort=col;state[w].dir=-1;}
+  renderTable(w);
+}
+function renderTable(w){
+  const data=w==='phys'?PHYS:DIG, s=state[w];
+  let rows=data.filter(r=>{
+    if(s.filter!=='All'&&r.tier!==s.filter)return false;
+    if(s.search&&!(r.label+(r.job||'')).toLowerCase().includes(s.search))return false;
+    return true;
+  });
+  rows.sort((a,b)=>{
+    const av=a[s.sort]??0,bv=b[s.sort]??0;
+    return typeof av==='string'?av.localeCompare(bv)*s.dir:(av-bv)*s.dir;
+  });
+  const tbody=document.getElementById(w+'-tbody');
+  if(w==='phys'){
+    tbody.innerHTML=rows.map(r=>`<tr>
+      <td style="font-weight:500;color:var(--ink)">${r.label}</td>
+      <td>${scoreBar(r.score,r.tier)}</td><td>${tierBadge(r.tier)}</td>
+      <td>${r.afterhrs.toLocaleString()}</td>
+      <td style="color:var(--muted)">${r.afterhrs_rt}</td>
+      <td>${r.zscore}</td><td>${r.footprint}</td>
+      <td style="color:${r.rapid>0?'var(--primary)':'var(--muted)'};font-weight:${r.rapid>0?600:400}">${r.rapid}</td>
+      <td>${r.dwell}</td><td style="color:var(--muted)">${r.wkend_pct}</td>
+    </tr>`).join('');
+  }else{
+    tbody.innerHTML=rows.map(r=>`<tr>
+      <td style="font-weight:500;color:var(--ink)">${r.label}</td>
+      <td style="color:var(--muted)">${r.job}</td>
+      <td>${scoreBar(r.score,r.tier)}</td><td>${tierBadge(r.tier)}</td>
+      <td>${r.total.toLocaleString()}</td>
+      <td style="color:var(--primary)">${r.priv}</td>
+      <td style="color:var(--error)">${r.unassoc}</td>
+      <td>${r.zscore}</td><td>${inactiveBadge(r.inactive)}</td>
+    </tr>`).join('');
+  }
+}
+
+// ── Overview charts ───────────────────────────────────────────────────────────
+function miniBar(id,data){
+  const max=Math.max(...data.map(d=>d.v),1);
+  document.getElementById(id).innerHTML=data.map(d=>`
+    <div class="mini-bar-row">
+      <div class="mini-bar-label">${d.k}</div>
+      <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${(d.v/max*100).toFixed(1)}%;background:${TIER_C[d.k]}"></div></div>
+      <div class="mini-bar-val" style="color:${TIER_C[d.k]}">${d.v.toLocaleString()}</div>
+    </div>`).join('');
+}
+function buildOverviewCharts(){
+  const pt={},dt={};
+  PHYS.forEach(r=>pt[r.tier]=(pt[r.tier]||0)+1);
+  DIG.forEach(r=>dt[r.tier]=(dt[r.tier]||0)+1);
+  const order=['Critical','High','Medium','Low'];
+  miniBar('overview-phys-chart',order.map(k=>{return{k,v:pt[k]||0}}));
+  miniBar('overview-dig-chart', order.map(k=>{return{k,v:dt[k]||0}}));
+}
+
+// ── Executive briefing ────────────────────────────────────────────────────────
+function buildBriefing(){
+  const physCrit=PHYS.filter(r=>r.tier==='Critical').length;
+  const digCrit=DIG.filter(r=>r.tier==='Critical').length;
+  const rapidUsers=PHYS.filter(r=>r.rapid>0).length;
+  const inactiveUsers=DIG.filter(r=>r.inactive).length;
+  const topPhys=PHYS[0];
+  const topDig=DIG[0];
+  const text=`As of December 2025, analysis of OG&amp;E's physical badge and digital identity data surfaces several priority concerns. <strong>${physCrit} badge holders</strong> score Critical on physical risk, led by after-hours access patterns and rapid succession events across key readers. <strong>${rapidUsers} users</strong> exhibit 5 or more badge attempts within 5-minute windows, a pattern consistent with tailgating or credential testing. On the digital side, <strong>${digCrit} identities</strong> score Critical, with top-flagged user <strong>${topDig.label}</strong> holding ${topDig.unassoc} unassociated entitlements outside any governance structure. Critically, <strong>${inactiveUsers} inactive identities</strong> retain active entitlements and should be deprioritized for immediate review. Cross-referencing both lists reveals users who appear anomalous in both physical behavior and digital access simultaneously &mdash; these represent the highest-priority targets for access review.`;
+  document.getElementById('exec-briefing').innerHTML=text;
+}
+
+// ── User Lookup ───────────────────────────────────────────────────────────────
+const ALL_USERS = [...new Set([...PHYS.map(r=>r.label),...DIG.map(r=>r.label)])].sort();
+
+function lookupUser(query){
+  const q=query.toLowerCase().trim();
+  const sugg=document.getElementById('lookup-suggestions');
+  const result=document.getElementById('lookup-result');
+  if(!q){sugg.style.display='none';result.classList.remove('visible');return;}
+
+  const matches=ALL_USERS.filter(u=>u.toLowerCase().includes(q)).slice(0,8);
+  if(matches.length>0){
+    sugg.style.display='block';
+    sugg.innerHTML=matches.map(u=>`<div onclick="selectUser('${u}')" style="padding:8px 14px;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--hairline-soft);color:var(--ink)" onmouseover="this.style.background='var(--surface-soft)'" onmouseout="this.style.background=''">${u}</div>`).join('');
+  }else{
+    sugg.style.display='none';
+  }
+
+  // Auto-select on exact match
+  const exact=ALL_USERS.find(u=>u.toLowerCase()===q);
+  if(exact) selectUser(exact);
+}
+
+function selectUser(label){
+  document.getElementById('lookup-input').value=label;
+  document.getElementById('lookup-suggestions').style.display='none';
+
+  const phys=PHYS.find(r=>r.label===label);
+  const dig=DIG.find(r=>r.label===label);
+  const result=document.getElementById('lookup-result');
+
+  document.getElementById('lu-name').textContent=label;
+
+  // Tiers
+  const pt=document.getElementById('lu-phys-tier');
+  const dt=document.getElementById('lu-dig-tier');
+  if(phys){pt.className='tier-badge tier-'+phys.tier;pt.textContent='Physical: '+phys.tier;}
+  else{pt.className='tier-badge tier-Low';pt.textContent='Physical: Not in top 200';}
+  if(dig){dt.className='tier-badge tier-'+dig.tier;dt.textContent='Digital: '+dig.tier;}
+  else{dt.className='tier-badge tier-Low';dt.textContent='Digital: Not in top 200';}
+
+  // Physical signals
+  const ps=document.getElementById('lu-phys-signals');
+  if(phys){
+    ps.innerHTML=`
+      <div class="signal-cell"><div class="signal-label">Risk Score</div><div class="signal-val coral">${phys.score}</div></div>
+      <div class="signal-cell"><div class="signal-label">After-Hrs Events</div><div class="signal-val">${phys.afterhrs.toLocaleString()}</div></div>
+      <div class="signal-cell"><div class="signal-label">After-Hrs Rate</div><div class="signal-val amber">${phys.afterhrs_rt}</div></div>
+      <div class="signal-cell"><div class="signal-label">Reader Z-Score</div><div class="signal-val">${phys.zscore}</div></div>
+      <div class="signal-cell"><div class="signal-label">Footprint</div><div class="signal-val">${phys.footprint} readers</div></div>
+      <div class="signal-cell"><div class="signal-label">Rapid Bursts</div><div class="signal-val ${phys.rapid>0?'coral':''}">${phys.rapid}</div></div>
+      <div class="signal-cell"><div class="signal-label">Avg Dwell</div><div class="signal-val">${phys.dwell}h</div></div>
+      <div class="signal-cell"><div class="signal-label">Weekend %</div><div class="signal-val">${phys.wkend_pct}</div></div>
+    `;
+  }else{ps.innerHTML='<div style="color:var(--on-dark-soft);font-size:0.85rem">Not in top 200 physical users</div>';}
+
+  // Digital signals
+  const ds=document.getElementById('lu-dig-signals');
+  if(dig){
+    ds.innerHTML=`
+      <div class="signal-cell"><div class="signal-label">Risk Score</div><div class="signal-val coral">${dig.score}</div></div>
+      <div class="signal-cell"><div class="signal-label">Job Family</div><div class="signal-val teal">${dig.job}</div></div>
+      <div class="signal-cell"><div class="signal-label">Total Ents</div><div class="signal-val">${dig.total.toLocaleString()}</div></div>
+      <div class="signal-cell"><div class="signal-label">Privileged</div><div class="signal-val amber">${dig.priv}</div></div>
+      <div class="signal-cell"><div class="signal-label">Unassociated</div><div class="signal-val ${dig.unassoc>0?'coral':''}">${dig.unassoc}</div></div>
+      <div class="signal-cell"><div class="signal-label">Ent Z-Score</div><div class="signal-val">${dig.zscore}</div></div>
+      <div class="signal-cell"><div class="signal-label">Inactive</div><div class="signal-val ${dig.inactive?'amber':''}">${dig.inactive?'Yes':'No'}</div></div>
+    `;
+  }else{ds.innerHTML='<div style="color:var(--on-dark-soft);font-size:0.85rem">Not in top 200 digital users</div>';}
+
+  // Plain-English explanation
+  let explain=``;
+  if(phys){
+    const highSignals=[];
+    if(phys.s_afterhrs>60)highSignals.push(`after-hours badge rate of ${phys.afterhrs_rt}`);
+    if(phys.s_zscore>60)highSignals.push(`reader frequency z-score of ${phys.zscore}`);
+    if(phys.rapid>0)highSignals.push(`${phys.rapid} rapid succession burst${phys.rapid>1?'s':''}`);
+    if(phys.s_footprint>60)highSignals.push(`unusually broad physical footprint (${phys.footprint} readers)`);
+    explain+=`<strong>${label}</strong> scores <strong>${phys.score}/100</strong> on physical risk`;
+    if(highSignals.length>0)explain+=`, driven primarily by ${highSignals.join(', ')}`;
+    explain+='. ';
+  }
+  if(dig){
+    const highSignals=[];
+    if(dig.unassoc>0)highSignals.push(`${dig.unassoc} entitlement${dig.unassoc>1?'s':''} outside any role or profile`);
+    if(dig.s_priv>60)highSignals.push(`${dig.priv} privileged entitlements, elevated for ${dig.job}`);
+    if(dig.s_zscore>60)highSignals.push(`entitlement count ${dig.zscore}x above job family norm`);
+    if(dig.inactive)highSignals.push(`identity marked inactive but retaining active access`);
+    explain+=`On the digital side, this identity scores <strong>${dig.score}/100</strong>`;
+    if(highSignals.length>0)explain+=` with flags including ${highSignals.join(', ')}`;
+    explain+='. ';
+  }
+  if(!phys&&!dig)explain='This user does not appear in the top 200 of either list.';
+  if(phys&&dig)explain+='<strong>This user appears in both anomaly lists simultaneously and should be prioritized for immediate access review.</strong>';
+
+  document.getElementById('lu-explanation').innerHTML=explain;
+  result.classList.add('visible');
+}
+
+// ── Simulator ─────────────────────────────────────────────────────────────────
+const physSliderDefs=[
+  {key:'s_afterhrs',label:'After-Hours Rate',val:40},
+  {key:'s_zscore',label:'Reader Z-Score',val:25},
+  {key:'s_footprint',label:'Footprint',val:15},
+  {key:'s_rapid',label:'Rapid Succession',val:10},
+  {key:'s_weekend',label:'Weekend-Only',val:5},
+  {key:'s_dwell',label:'Dwell Time',val:5},
+];
+const digSliderDefs=[
+  {key:'s_zscore',label:'Entitlement Z-Score',val:35},
+  {key:'s_priv',label:'Privileged Count',val:30},
+  {key:'s_unassoc',label:'Unassociated Ents',val:20},
+  {key:'s_inactive',label:'Inactive Identity',val:15},
+];
+
+function buildSliders(){
+  function renderSliders(containerId, defs, which){
+    const el=document.getElementById(containerId);
+    el.innerHTML=defs.map((d,i)=>`
+      <div class="slider-row">
+        <div class="slider-label">${d.label}</div>
+        <input type="range" min="0" max="100" value="${d.val}" id="sl-${which}-${i}" oninput="updateSim('${which}')" style="flex:1"/>
+        <div class="slider-pct" id="sl-${which}-${i}-val">${d.val}%</div>
+      </div>`).join('');
+  }
+  renderSliders('phys-sliders',physSliderDefs,'phys');
+  renderSliders('dig-sliders',digSliderDefs,'dig');
+  updateSim('phys');updateSim('dig');
+}
+
+function updateSim(which){
+  const defs=which==='phys'?physSliderDefs:digSliderDefs;
+  const data=which==='phys'?PHYS:DIG;
+  const listId=which==='phys'?'sim-phys-list':'sim-dig-list';
+
+  const weights=defs.map((_,i)=>{
+    const el=document.getElementById(`sl-${which}-${i}`);
+    const v=parseFloat(el.value);
+    document.getElementById(`sl-${which}-${i}-val`).textContent=v+'%';
+    return v;
+  });
+  const total=weights.reduce((a,b)=>a+b,0)||1;
+  const normW=weights.map(w=>w/total);
+
+  const scored=data.map(r=>{
+    const s=defs.reduce((acc,d,i)=>acc+(r[d.key]||0)*normW[i],0);
+    return{...r,sim_score:Math.round(s*10)/10};
+  }).sort((a,b)=>b.sim_score-a.sim_score).slice(0,10);
+
+  const list=document.getElementById(listId);
+  list.innerHTML=scored.map((r,i)=>`
+    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid rgba(255,255,255,0.06)">
+      <div style="width:1.5rem;font-size:0.75rem;color:var(--on-dark-soft);text-align:right">${i+1}</div>
+      <div style="flex:1;font-size:0.82rem;color:var(--on-dark);font-weight:500">${r.label}</div>
+      <div style="font-family:var(--mono);font-size:0.8rem;color:var(--primary)">${r.sim_score}</div>
+      ${tierBadge(r.tier)}
+    </div>`).join('');
+}
+
+// ── Overlap tables ────────────────────────────────────────────────────────────
+function buildOverlapTables(){
+  const ptop=PHYS.filter(r=>['Critical','High'].includes(r.tier)).slice(0,25);
+  document.getElementById('overlap-phys-tbody').innerHTML=ptop.map(r=>`<tr>
+    <td style="font-weight:500">${r.label}</td>
+    <td style="color:${TIER_C[r.tier]};font-weight:600">${r.score}</td>
+    <td>${tierBadge(r.tier)}</td>
+    <td>${r.afterhrs.toLocaleString()}</td>
+    <td style="color:${r.rapid>0?'var(--primary)':'var(--muted)'}">${r.rapid}</td>
+  </tr>`).join('');
+  const dtop=DIG.filter(r=>['Critical','High','Medium'].includes(r.tier)).slice(0,25);
+  document.getElementById('overlap-dig-tbody').innerHTML=dtop.map(r=>`<tr>
+    <td style="font-weight:500">${r.label}</td>
+    <td style="color:var(--muted)">${r.job}</td>
+    <td style="color:${TIER_C[r.tier]};font-weight:600">${r.score}</td>
+    <td>${tierBadge(r.tier)}</td>
+    <td style="color:var(--error);font-weight:600">${r.unassoc}</td>
+    <td>${inactiveBadge(r.inactive)}</td>
+  </tr>`).join('');
+}
+
+// ── Radar ─────────────────────────────────────────────────────────────────────
+function buildRadar(){
+  const canvas=document.getElementById('radar');
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2,R=Math.min(W,H)/2-52;
+  const labels=['After-Hrs','Reader Z','Rapid','Unassoc Ents','Ent Z-Score','Inactive'];
+  const u=[88,72,0,100,40,0];
+  const avg=[24,18,12,2,18,8];
+  const n=labels.length;
+  function pt(v,i,r){const a=(Math.PI*2*i/n)-Math.PI/2;return[cx+Math.cos(a)*(v/100)*r,cy+Math.sin(a)*(v/100)*r];}
+  ctx.clearRect(0,0,W,H);
+  // Grid
+  [20,40,60,80,100].forEach(p=>{
+    ctx.beginPath();
+    labels.forEach((_,i)=>{const[x,y]=pt(p,i,R);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+    ctx.closePath();ctx.strokeStyle='#e6dfd8';ctx.lineWidth=1;ctx.stroke();
+  });
+  labels.forEach((_,i)=>{const[x,y]=pt(100,i,R);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.strokeStyle='#e6dfd8';ctx.lineWidth=1;ctx.stroke();});
+  // Avg polygon
+  ctx.beginPath();avg.forEach((v,i)=>{const[x,y]=pt(v,i,R);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.closePath();ctx.fillStyle='rgba(108,106,100,0.1)';ctx.strokeStyle='rgba(108,106,100,0.4)';ctx.lineWidth=1.5;ctx.fill();ctx.stroke();
+  // User polygon
+  ctx.beginPath();u.forEach((v,i)=>{const[x,y]=pt(v,i,R);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.closePath();ctx.fillStyle='rgba(204,120,92,0.15)';ctx.strokeStyle='#cc785c';ctx.lineWidth=2;ctx.fill();ctx.stroke();
+  // Labels
+  ctx.font='500 10px Inter,sans-serif';ctx.fillStyle='#6c6a64';ctx.textAlign='center';
+  labels.forEach((lbl,i)=>{const[x,y]=pt(122,i,R);ctx.fillText(lbl,x,y);});
+
+  document.getElementById('radar-legend').innerHTML=labels.map((l,i)=>`
+    <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.6rem;font-size:0.8rem;color:var(--body)">
+      <div style="width:10px;height:10px;border-radius:50%;background:var(--primary);flex-shrink:0"></div>
+      <span>${l}</span>
+      <span style="margin-left:auto;color:var(--primary);font-weight:600">${u[i]}</span>
+    </div>`).join('');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+renderTable('phys');
+renderTable('dig');
+buildOverviewCharts();
+buildBriefing();
+buildOverlapTables();
+buildRadar();
+buildSliders();
+</script>
+</body>
+</html>
